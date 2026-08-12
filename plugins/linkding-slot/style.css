@@ -1,0 +1,191 @@
+/* ─────────────────────────────────────────────────────────────────────────────
+   linkding Slot — style.css
+
+   Colours come from Degoog's own CSS variables, so the panel follows whatever
+   theme and colourway is active rather than pinning its own palette. Every
+   var() carries a fallback chain ending in a literal, so the panel still reads
+   correctly on a theme that defines none of them.
+
+   All selectors are prefixed .ld-* to avoid collisions with other extensions.
+───────────────────────────────────────────────────────────────────────────── */
+
+/* ── Results (shared by both variants) ───────────────────────────────────── */
+
+.ld-results {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.ld-result-title {
+  display: block;
+  font-size: 1rem;
+  font-weight: 400;
+  color: var(--degoog-link, var(--degoog-accent, #4a9eff));
+  text-decoration: none;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  line-height: 1.3;
+}
+
+.ld-result-title:hover {
+  text-decoration: underline;
+}
+
+.ld-result-url {
+  font-size: 0.78rem;
+  color: var(--degoog-url, var(--degoog-text-muted, #4d8c57));
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin-top: 1px;
+}
+
+.ld-result-snippet {
+  font-size: 0.875rem;
+  color: var(--degoog-text, inherit);
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  line-height: 1.45;
+  margin-top: 2px;
+  opacity: 0.9;
+}
+
+/* ── Tags ────────────────────────────────────────────────────────────────── */
+
+.ld-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+  margin-top: 4px;
+}
+
+.ld-tag {
+  font-size: 0.68rem;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: var(--degoog-tag-bg, rgba(128, 128, 128, 0.12));
+  color: var(--degoog-text-secondary, var(--degoog-text-muted, #888));
+  white-space: nowrap;
+}
+
+/* ── Detail levels ───────────────────────────────────────────────────────── */
+/* The renderer already omits the markup; these rules keep the layout tight
+   and cover any element that slips through. */
+
+.ld-detail-title .ld-result-url,
+.ld-detail-title .ld-result-snippet,
+.ld-detail-title .ld-tags {
+  display: none;
+}
+
+.ld-detail-title .ld-results {
+  gap: 0.35rem;
+}
+
+.ld-detail-snippet .ld-result-url,
+.ld-detail-snippet .ld-tags {
+  display: none;
+}
+
+.ld-detail-snippet .ld-results {
+  gap: 0.55rem;
+}
+
+/* ── Inline variant ──────────────────────────────────────────────────────── */
+
+.ld-inline {
+  font-size: 0.9rem;
+}
+
+.ld-footer {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin-top: 0.65rem;
+  padding-top: 0.5rem;
+  border-top: 1px solid var(--degoog-border, rgba(128, 128, 128, 0.15));
+  font-size: 0.72rem;
+  color: var(--degoog-text-secondary, var(--degoog-text-muted, #aaa));
+}
+
+.ld-footer-label {
+  flex: 1;
+}
+
+.ld-slot-viewall {
+  font-size: 0.72rem;
+  color: var(--degoog-accent, var(--degoog-primary, #4a9eff));
+  text-decoration: none;
+  opacity: 0.8;
+  white-space: nowrap;
+}
+
+.ld-slot-viewall:hover {
+  opacity: 1;
+  text-decoration: underline;
+}
+
+/* ── Card variant ────────────────────────────────────────────────────────── */
+
+.ld-card {
+  border-left: 3px solid var(--degoog-accent, var(--degoog-primary, #4a9eff));
+  padding-left: 0.875rem;
+  font-size: 0.9rem;
+}
+
+.ld-slot-header {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin-bottom: 0.5rem;
+}
+
+.ld-card .ld-slot-header {
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--degoog-accent, var(--degoog-primary, #4a9eff));
+}
+
+.ld-card .ld-dot {
+  display: none;
+}
+
+.ld-slot-label {
+  flex: 1;
+}
+
+.ld-card .ld-results {
+  gap: 0.4rem;
+}
+
+.ld-card .ld-result-title {
+  font-size: 0.875rem;
+}
+
+.ld-card .ld-result-snippet {
+  font-size: 0.78rem;
+  -webkit-line-clamp: 1;
+}
+
+/* ── Error ───────────────────────────────────────────────────────────────── */
+/* Deliberately quiet. A misconfigured panel should be readable, not alarming. */
+
+.ld-error {
+  font-size: 0.82rem;
+  color: var(--degoog-text-secondary, var(--degoog-text-muted, #888));
+  padding: 0.2rem 0;
+}
+
+/* ── Responsive ──────────────────────────────────────────────────────────── */
+
+@media (max-width: 600px) {
+  .ld-card {
+    padding-left: 0.65rem;
+  }
+}

@@ -1,0 +1,26 @@
+{
+  "name": "roro-degoog-extensions",
+  "description": "Degoog extensions by roro — self-hosted integrations for a homelab stack.",
+  "author": "roro",
+  "plugins": [
+    {
+      "path": "plugins/linkding-slot",
+      "name": "linkding",
+      "description": "Integrates your self-hosted [linkding](https://github.com/sissbruecker/linkding) bookmark manager into Degoog: an \"In your bookmarks\" panel alongside search results. Requires Degoog 0.24.0 or newer.",
+      "version": "1.0.0",
+      "type": "slot",
+      "screenshots": []
+    }
+  ],
+  "engines": [
+    {
+      "path": "engines/linkding-engine",
+      "name": "linkding Engine",
+      "description": "Native linkding bookmark search engine: results in a dedicated tab and via the `!linkding` bang shortcut. Which tabs it feeds is set from Degoog's own engine type override.",
+      "version": "1.0.0",
+      "screenshots": []
+    }
+  ],
+  "themes": [],
+  "transports": []
+}

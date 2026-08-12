@@ -1,0 +1,6 @@
+node_modules/
+*.log
+
+# Local scratch used when smoke-testing extensions against a live linkding
+.env
+.env.local

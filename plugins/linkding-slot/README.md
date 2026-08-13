@@ -78,9 +78,13 @@ decides on the client which panels belong to the active tab. The plugin keeps a 
 search your bookmarks for the literal string `!linkding rust`. Queries shorter than two
 characters are skipped too.
 
-**Requests honour your transport settings.** The panel uses Degoog's injected `context.fetch`,
-so the transport and proxy settings configured for this extension apply. It never calls global
-`fetch`.
+**Requests honour your transport settings.** The panel prefers Degoog's injected `context.fetch`,
+so the transport and proxy settings configured for this extension apply, falling back to global
+`fetch` only if the host injects none.
+
+**The panel bounds its own requests.** Plugins get no `timeoutMs` setting from Degoog, so the
+panel aborts after 3 seconds and briefly caches the failure, rather than letting a hung linkding
+stall every search.
 
 **Errors are shown, not swallowed.** A bad token or an unreachable instance renders a short
 message in the panel, because a silently empty panel is indistinguishable from "no bookmarks

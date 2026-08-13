@@ -54,6 +54,10 @@ async function errorFor(response) {
  * @param {Function} [opts.onResponse] called with the raw Response *before* its
  *                                    body is read. Engines use this to hand the
  *                                    un-consumed Response to `context.sentinel`.
+ * @param {AbortSignal} [opts.signal] aborts the request. Plugins should always
+ *                                    pass one: unlike engines they get no
+ *                                    `timeoutMs` setting from degoog, so without
+ *                                    a signal a hung linkding stalls every search.
  * @returns {Promise<{results: object[], count: number}>}
  * @throws {Error} with a human-readable message on any non-2xx response
  */
@@ -65,6 +69,7 @@ export async function searchBookmarks({
   offset = 0,
   doFetch,
   onResponse,
+  signal,
 }) {
   const root = normalizeBaseUrl(baseUrl);
 
@@ -81,6 +86,7 @@ export async function searchBookmarks({
       Accept: "application/json",
       Authorization: `Token ${token}`,
     },
+    signal,
   });
 
   // Must run before the body is read: degoog's sentinel inspects the raw
@@ -91,7 +97,22 @@ export async function searchBookmarks({
     throw new Error(await errorFor(response));
   }
 
-  const body = await response.json();
+  // Read as text first. A 200 carrying HTML is the most common misconfiguration
+  // in this deployment shape - a reverse proxy answering with a login or
+  // interstitial page instead of forwarding to the API - and calling .json()
+  // directly on it produces "Unexpected token '<'", which names nothing the
+  // reader can act on.
+  const text = await response.text();
+  let body;
+  try {
+    body = JSON.parse(text);
+  } catch {
+    throw new Error(
+      "linkding returned a 200 that is not JSON. The base URL probably points " +
+        "at a login or proxy page rather than the linkding API.",
+    );
+  }
+
   return {
     results: Array.isArray(body?.results) ? body.results : [],
     count: Number(body?.count) || 0,
@@ -143,7 +164,19 @@ export function tagsOf(bookmark) {
   return Array.isArray(bookmark?.tag_names) ? bookmark.tag_names : [];
 }
 
-/** The bookmarked URL. */
+/**
+ * The bookmarked URL, but only if it uses a safe scheme.
+ *
+ * Escaping a URL before putting it in an href stops it breaking out of the
+ * attribute, but does nothing about the scheme: `javascript:alert(1)` survives
+ * escaping unchanged and stays clickable, running in degoog's own origin. So
+ * the scheme is allowlisted here rather than at the render site, which means
+ * both the panel and the engine's results are covered by one check.
+ *
+ * Returning "" degrades cleanly: the panel renders the title as plain text
+ * instead of a link, and the engine's filter drops the result entirely.
+ */
 export function urlOf(bookmark) {
-  return bookmark?.url || "";
+  const raw = String(bookmark?.url || "").trim();
+  return /^https?:\/\//i.test(raw) ? raw : "";
 }

@@ -46,7 +46,8 @@ scraped from the page:
 - **snippet** — `description`, else `website_description`, else `notes` (capped at 300 chars)
 - **url** — the bookmarked URL
 
-Results missing a title or a URL are dropped.
+Results without a usable URL are dropped. That includes bookmarks whose URL is not `http` or
+`https` - a `javascript:` URL would otherwise render as a clickable link in Degoog's own origin.
 
 ## Notes
 
@@ -54,9 +55,9 @@ Results missing a title or a URL are dropped.
 separate registries, so if you also run the linkding bookmarks panel, its URL and token are
 entered again under Settings → Plugins. Having one configured says nothing about the other.
 
-**Requests honour your transport settings.** The engine uses Degoog's injected `context.fetch`,
+**Requests honour your transport settings.** The engine prefers Degoog's injected `context.fetch`,
 so `outgoingTransport`, `timeoutMs`, and the proxy settings configured for this engine all
-apply. It never calls global `fetch`.
+apply, falling back to global `fetch` only if the host injects none.
 
 **Failures are quiet by design.** An unreachable instance, a bad token, or a missing
 configuration logs a `[linkding-engine]` warning and returns no results, rather than throwing

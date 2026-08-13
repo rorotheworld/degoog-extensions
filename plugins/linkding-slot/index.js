@@ -62,7 +62,23 @@ const _linkUrl = () => cfg.publicUrl || cfg.url;
 let _cache = null;
 let _ctxFetch = null;
 
+// Bumped on every configure(). It goes into the cache key so that changing the
+// instance URL or rotating the token cannot serve results fetched from the old
+// configuration for the remainder of the TTL - which reads as "my fix didn't
+// take" to whoever is debugging a wrong URL.
+let _cfgGeneration = 0;
+
 const CACHE_TTL_MS = 30_000;
+
+// A failure is cached too, briefly. Without this, a hung or broken linkding is
+// re-contacted on every single search with no backoff.
+const ERROR_CACHE_TTL_MS = 8_000;
+
+// Plugins get no timeoutMs setting from degoog (only engines do), so the panel
+// has to bound its own request. Without it, a linkding that hangs rather than
+// refuses stalls every degoog search for as long as the runtime's socket
+// timeout allows.
+const REQUEST_TIMEOUT_MS = 3_000;
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -76,8 +92,13 @@ const _bool = (v) =>
       ? false
       : Boolean(v);
 
-const _clamp = (v, min, max, fallback) =>
-  Math.max(min, Math.min(max, parseInt(v, 10) || fallback));
+// Number.isFinite rather than `|| fallback`: parseInt("0") is 0, which is
+// falsy, so the `||` idiom would silently replace a legitimate zero with the
+// fallback. Harmless for the 1-20 ranges here, wrong for any range including 0.
+const _clamp = (v, min, max, fallback) => {
+  const n = parseInt(v, 10);
+  return Math.max(min, Math.min(max, Number.isFinite(n) ? n : fallback));
+};
 
 // Degoog exposes a cache under two different names depending on version, and
 // may expose neither. Probe for both, then fall back to running uncached.
@@ -96,9 +117,9 @@ async function _cacheGet(key) {
   }
 }
 
-async function _cacheSet(key, value) {
+async function _cacheSet(key, value, ttlMs = CACHE_TTL_MS) {
   try {
-    if (_cache) await _cache.set(key, value, CACHE_TTL_MS);
+    if (_cache) await _cache.set(key, value, ttlMs);
   } catch {
     // Same: caching is an optimisation, not a requirement.
   }
@@ -123,6 +144,11 @@ function _renderResult(bookmark) {
 
   // Everything interpolated below is escaped, including the href: a bookmark
   // title or URL is user-supplied data that reaches this panel unfiltered.
+  //
+  // Escaping alone is not enough for the href. It stops a quote breaking out of
+  // the attribute, but leaves the scheme untouched, so `javascript:...` would
+  // still be clickable. urlOf() allowlists http(s) and returns "" otherwise,
+  // which is why the falsy branch below renders plain text instead of a link.
   const titleEl = url
     ? `<a class="ld-result-title" href="${escapeHtml(url)}" target="_blank" rel="noopener">${escapeHtml(title)}</a>`
     : `<span class="ld-result-title">${escapeHtml(title)}</span>`;
@@ -247,6 +273,7 @@ export const slot = {
       ? settings.detail
       : "snippet";
     cfg.limit = _clamp(settings?.limit, 1, 20, 5);
+    _cfgGeneration++;
   },
 
   init(ctx) {
@@ -281,15 +308,35 @@ export const slot = {
     // correct the moment Degoog starts passing a tab.
     if (context?.tab && context.tab !== "all") return { html: "" };
 
-    const q = String(query || "").trim();
-    const cacheKey = `${q}::${cfg.limit}`;
+    // execute() does not normally run unless trigger() passed, but it does not
+    // cost anything to not depend on that.
+    if (!_isConfigured()) return { html: "" };
 
-    let bookmarks = await _cacheGet(cacheKey);
+    const q = String(query || "").trim();
+    // The generation counter keeps results from a previous URL/token out of the
+    // cache window after a settings change.
+    const cacheKey = `${_cfgGeneration}::${q}::${cfg.limit}`;
+
+    const cached = await _cacheGet(cacheKey);
+
+    // A cached failure is replayed rather than retried, so a down instance is
+    // contacted once per window instead of once per search.
+    if (cached?.error) {
+      return {
+        html: `<div class="ld-slot ld-error">${escapeHtml(cached.error)}</div>`,
+      };
+    }
+
+    let bookmarks = cached?.results;
 
     if (!bookmarks) {
+      // Plugins have no timeoutMs setting, so the deadline is enforced here.
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
       try {
         // Prefer Degoog's injected fetch so the request honours this
-        // extension's transport and proxy settings. Never call global fetch.
+        // extension's transport and proxy settings, falling back to global
+        // fetch only if the host injects none.
         const doFetch = context?.fetch ?? _ctxFetch ?? fetch;
         const { results } = await searchBookmarks({
           baseUrl: cfg.url,
@@ -297,15 +344,25 @@ export const slot = {
           query: q,
           limit: cfg.limit,
           doFetch,
+          signal: controller.signal,
         });
         bookmarks = results;
-        await _cacheSet(cacheKey, bookmarks);
+        await _cacheSet(cacheKey, { results });
       } catch (err) {
+        // String(err?.message ?? err): reading .message off a non-object would
+        // throw from inside the catch and escape execute().
+        const message =
+          err?.name === "AbortError"
+            ? `linkding did not respond within ${REQUEST_TIMEOUT_MS / 1000}s.`
+            : String(err?.message ?? err);
+        await _cacheSet(cacheKey, { error: message }, ERROR_CACHE_TTL_MS);
         // Shown rather than swallowed: a wrong token should be visible, not a
         // silently empty panel that looks like "no bookmarks matched".
         return {
-          html: `<div class="ld-slot ld-error">${escapeHtml(err.message)}</div>`,
+          html: `<div class="ld-slot ld-error">${escapeHtml(message)}</div>`,
         };
+      } finally {
+        clearTimeout(timer);
       }
     }
 

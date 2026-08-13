@@ -124,10 +124,17 @@ export default class LinkdingEngine {
           snippet: snippetOf(bookmark),
           source: this.name,
         }))
-        .filter((result) => result.title && result.url);
+        // urlOf() returns "" for anything that is not http(s), so this also
+        // drops bookmarks carrying a javascript: or data: URL. titleOf() always
+        // returns a non-empty string, so only the url check ever fires.
+        .filter((result) => result.url);
     } catch (err) {
+      // String(err?.message ?? err) rather than err.message: if something threw
+      // a non-object, reading .message would itself throw from inside the catch
+      // and escape executeSearch, taking down the merged results that every
+      // other engine contributed to.
       console.warn(
-        `[linkding-engine] search against ${_url} failed: ${err.message}`,
+        `[linkding-engine] search against ${_url} failed: ${String(err?.message ?? err)}`,
       );
       return [];
     }

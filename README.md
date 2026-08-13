@@ -31,9 +31,15 @@ The two are independent. Install either alone, or both.
 so the linkding base URL and API token are entered twice — once under Settings → Plugins,
 once under Settings → Engines. There is no shared configuration between the two.
 
-**They each query linkding once.** On the "all" tab the panel and the engine issue their own
-requests; no cache is shared between the plugin and engine registries. The panel suppresses
-itself on the dedicated linkding tab, where the engine already owns the results.
+**They each query linkding once per search.** The panel and the engine issue their own
+requests; no cache is shared between the plugin and engine registries. Degoog decides on the
+client which tab a panel belongs to — extensions are not told.
+
+**If Degoog routes its traffic through a VPN or proxy**, point the extensions at an address
+the Degoog container can reach directly (its container name on a shared Docker network) rather
+than a public hostname, which would be sent out through the exit node and fail with
+`CONNECT tunnel failed`. The plugin then takes a separate `publicUrl` for its browser-facing
+links.
 
 **Your API token never reaches the browser.** Both extensions run server-side
 (`isClientExposed: false`).

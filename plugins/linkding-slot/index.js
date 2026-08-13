@@ -42,12 +42,19 @@ export const plugin = {
 
 const cfg = {
   url: "",
+  publicUrl: "",
   token: "",
   panelEnabled: true,
   limit: 5,
   style: "inline",
   detail: "snippet",
 };
+
+// The address the server fetches from and the address the browser can open are
+// not always the same. If linkding is only reachable from Degoog over an
+// internal Docker network, `url` is that internal address and `publicUrl` is
+// the one a person can actually click. Falls back to `url` when unset.
+const _linkUrl = () => cfg.publicUrl || cfg.url;
 
 // Set in init() from the host context. Used only to de-duplicate this plugin's
 // own repeat queries (pagination, back/forward). It cannot see the engine's
@@ -156,8 +163,21 @@ export const slot = {
       fieldset: "Connection",
       placeholder: "https://linkding.example.com",
       description:
-        "Base URL of your linkding instance, with no trailing slash. Point it " +
-        "at the site root, not at /bookmarks.",
+        "Base URL Degoog uses to reach linkding, with no trailing slash. Point " +
+        "it at the site root, not at /bookmarks. This may be an internal " +
+        "address such as http://linkding:9090 if that is how the Degoog " +
+        "container reaches it.",
+    },
+    {
+      key: "publicUrl",
+      label: "Public URL (optional)",
+      type: "url",
+      required: false,
+      fieldset: "Connection",
+      placeholder: "https://linkding.example.com",
+      description:
+        "Only needed if the URL above is not reachable from your browser. Used " +
+        'for the "View all" link. Leave empty to reuse the URL above.',
     },
     {
       key: "token",
@@ -216,6 +236,7 @@ export const slot = {
     // Every value arrives as a string whatever its declared type, so anything
     // non-string has to be coerced explicitly.
     cfg.url = normalizeBaseUrl(settings?.url);
+    cfg.publicUrl = normalizeBaseUrl(settings?.publicUrl);
     cfg.token = settings?.token || "";
     cfg.panelEnabled =
       settings?.panelEnabled === undefined
@@ -250,9 +271,14 @@ export const slot = {
 
   async execute(query, context) {
     // On the dedicated linkding tab the engine already owns the results, so a
-    // panel repeating them is noise. This is also the only de-duplication
-    // available between the plugin and the engine: they are separate
-    // registries with no shared cache or context.
+    // panel repeating them would be noise.
+    //
+    // As of Degoog 0.24.0 this never fires: the /api/slots request body is only
+    // {query, results?}, so `context.tab` is undefined and the guard falls
+    // through. Degoog gates slots by tab on the client instead, discarding
+    // panels that do not belong to the active tab. The guard is kept because it
+    // is free, it is what the official weather-slot does, and it becomes
+    // correct the moment Degoog starts passing a tab.
     if (context?.tab && context.tab !== "all") return { html: "" };
 
     const q = String(query || "").trim();
@@ -286,7 +312,9 @@ export const slot = {
     const displayed = bookmarks.slice(0, cfg.limit);
     if (!displayed.length) return { html: "" };
 
-    const viewAll = `${cfg.url}/bookmarks?q=${encodeURIComponent(q)}`;
+    // Browser-facing, so it must use the public address, not the one the
+    // server fetched from.
+    const viewAll = `${_linkUrl()}/bookmarks?q=${encodeURIComponent(q)}`;
     const items = displayed.map(_renderResult).join("");
     const viewAllLink = `<a class="ld-slot-viewall" href="${escapeHtml(viewAll)}" target="_blank" rel="noopener">View all &rarr;</a>`;
 

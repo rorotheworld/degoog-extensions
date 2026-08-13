@@ -15,8 +15,16 @@ Requires **Degoog 0.24.0** or newer.
 
 | Setting | Type | Default | Notes |
 | --- | --- | --- | --- |
-| `url` | URL | — | Base URL of your linkding instance, no trailing slash. Point it at the site root, not at `/bookmarks`. |
+| `url` | URL | — | Address **Degoog** uses to reach linkding, no trailing slash, pointing at the site root rather than `/bookmarks`. May be an internal address such as `http://linkding:9090`. |
+| `publicUrl` | URL | *(empty)* | Only needed when `url` is not reachable from your browser. Used for the "View all" link. Empty reuses `url`. |
 | `token` | Password | — | The REST API token from step 1. Stored server-side; never sent to the browser. |
+
+> **If Degoog routes its traffic through a VPN or proxy**, a public linkding URL may fail with
+> `CONNECT tunnel failed`, because the request leaves through an exit node that cannot see your
+> instance. Point `url` at an address reachable from the Degoog container — the container name
+> on a shared Docker network works well — and set `publicUrl` to the address you open in a
+> browser. Unlike engines, plugins get no per-extension proxy override, so this split is the
+> way around it.
 
 ### Panel
 
@@ -56,9 +64,15 @@ nothing else. If you want linkding as a primary result surface, install the comp
 separate registries, so if you also run the engine, its URL and token are entered again under
 Settings → Engines. Having one configured says nothing about the other.
 
-**Each queries linkding once.** On the "all" tab the panel and the engine issue their own
-requests; there is no shared cache between the two registries. The panel suppresses itself on
-the dedicated linkding tab, where the engine already owns the results.
+**Each queries linkding once per search.** The panel and the engine issue their own requests;
+there is no shared cache between the two registries. The plugin caches its own repeat queries
+for 30 seconds where Degoog offers a cache, which covers pagination and back/forward, but it
+cannot see the engine's traffic.
+
+**Tab gating is Degoog's, not the plugin's.** As of Degoog 0.24.0 the `/api/slots` request
+carries only the query, so an extension cannot tell which tab it is rendering for. Degoog
+decides on the client which panels belong to the active tab. The plugin keeps a defensive
+`context.tab` check for the day that changes; today it never fires.
 
 **Bang queries are skipped.** A search like `!linkding rust` would otherwise make the panel
 search your bookmarks for the literal string `!linkding rust`. Queries shorter than two

@@ -13,13 +13,22 @@ Requires **Degoog 0.21.0** or newer.
 
 | Setting | Type | Default | Notes |
 | --- | --- | --- | --- |
-| `url` | URL | — | Base URL of your linkding instance, no trailing slash. Point it at the site root, not at `/bookmarks`. |
+| `url` | URL | — | Address Degoog uses to reach linkding, no trailing slash, pointing at the site root rather than `/bookmarks`. May be an internal address such as `http://linkding:9090`. |
 | `token` | Password | — | The REST API token from step 1. Stored server-side; never sent to the browser. |
 | `limit` | Text | `20` | Maximum bookmarks returned per search. Clamped to 1–50. |
 
 3. Toggle the engine on. **Toggle it off and on once** if the linkding tab does not appear —
    Degoog only writes a third-party engine into `default-engines.json` the first time it is
    toggled in the UI, and the tab list reads from that file.
+4. Leave **Search type override** empty. Setting it to `web` suppresses the dedicated linkding
+   tab, because the override replaces the engine's declared `["web", "linkding"]` types rather
+   than adding to them.
+
+> **If Degoog routes its traffic through a VPN or proxy**, a public linkding URL may fail with
+> `CONNECT tunnel failed`: the request leaves through an exit node that cannot reach your
+> instance. Either point `url` at an address reachable from the Degoog container (its container
+> name on a shared Docker network), or enable this engine's **Proxy override** to bypass the
+> global proxy. The first is the more robust of the two.
 
 ## What you get
 

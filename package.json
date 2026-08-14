@@ -1,6 +1,6 @@
 {
-  "name": "roro-degoog-extensions",
-  "description": "Degoog extensions by roro — self-hosted integrations for a homelab stack.",
+  "name": "linkding-degoog-compat",
+  "description": "Degoog extensions for linkding: a bookmarks panel and a search engine.",
   "author": "roro",
   "plugins": [
     {

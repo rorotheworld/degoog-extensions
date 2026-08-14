@@ -1,6 +1,6 @@
 # linkding-degoog-compat
 
-⚠️ These were 100% coded by Opus 5, but from all my testing it works and is safe. Install at your own discretion. ⚠️
+⚠️ These were 100% coded by Opus 5, but from all my testing they work and are safe. Install at your own discretion. ⚠️
 
 [linkding](https://github.com/sissbruecker/linkding) bookmark integrations, as a plugin  + search engine.
 

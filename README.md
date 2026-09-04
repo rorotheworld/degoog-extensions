@@ -1,8 +1,8 @@
-# linkding-degoog-compat
+# degoog-extensions
 
 ⚠️These were 100% coded by Opus 5, but from all my testing they work and are safe. Install at your own discretion.⚠️
 
-[linkding](https://github.com/sissbruecker/linkding) bookmark integrations, as a plugin  + search engine.
+Self-hosted [degoog](https://github.com/degoog-org/degoog) extensions for the operator's stack - plugins, engines, and themes. Currently: [linkding](https://github.com/sissbruecker/linkding) bookmark integrations.
 
 ## Extensions
 
@@ -11,7 +11,7 @@
 | [linkding](plugins/linkding-slot) | Plugin (slot) | Panel of matching bookmarks alongside normal search results | 0.24.0 |
 | [linkding Engine](engines/linkding-engine) | Engine | Dedicated linkding results tab and the `!linkding` bang | 0.21.0 |
 
-The two are independent. Install either alone or both.
+Each extension is independent. Install any of them alone or all together.
 
 ## Notes
 

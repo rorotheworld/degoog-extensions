@@ -1,6 +1,6 @@
 {
-  "name": "linkding-degoog-compat",
-  "description": "Degoog extensions for linkding: a bookmarks panel and a search engine.",
+  "name": "degoog-extensions",
+  "description": "Self-hosted degoog extensions for the operator's stack",
   "author": "roro",
   "plugins": [
     {

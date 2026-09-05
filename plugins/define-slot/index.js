@@ -1293,55 +1293,74 @@ function cleanEtymology(text) {
   return out;
 }
 
-// Reduce a cleaned etymology to its plain-language core.
+// Reduce a Wiktionary etymology to its plain-language core.
 //
-// A full Wiktionary etymology is heavy: it can start with an "Etymology tree" of
-// proto-language links (often in foreign scripts), then a long prose paragraph,
-// then a "Cognate with" / "Compare" tail. For the summary view we keep only the
-// prose that actually explains the word, cut sentence-ish at a sensible length.
-function summarizeEtymology(raw) {
+// Returns two strings:
+//   prose - the derivation prose with the scaffolding stripped. For a tree dump
+//           this is the actual "From ... / Coined ... / Inherited ..." sentences,
+//           not the proto-language links in foreign scripts. For a plain prose
+//           etymology it is the cleaned text with the "Cognate with" tail cut.
+//   full  - the fully cleaned raw text (for the "full" origin setting).
+// The card shows `prose` by default; the summary is `prose` cut at a sentence
+// boundary so it never reads as chopped mid-clause.
+function etymologyText(raw) {
   const cleaned = cleanEtymology(raw);
+  let prose = cleaned;
 
-  // If the text is a line-broken tree dump, the readable derivation is the last
-  // long line (the one that reaches the modern word). Take the longest sentence
-  // fragment that runs to the end.
-  let text = cleaned;
-  const startsWithTree = /^etymology tree/i.test(raw);
-  if (startsWithTree) {
+  // Line-broken tree dump: keep only true derivation prose lines.
+  if (/^etymology tree/i.test(raw)) {
     const lines = String(raw)
       .split(/\n+/)
       .map((l) => l.trim())
-      .filter(Boolean);
-    // Prefer the last line containing a terminal period and more than a token.
-    const prose = [...lines].reverse().find((l) => /\.$/.test(l) && l.length > 40);
-    if (prose) text = cleanEtymology(prose);
+      .filter(Boolean)
+      .slice(1); // drop the "Etymology tree" heading
+    const proseStarter = /^(?:from|borrowed|inherited|coined|first |learned|a jocular|a loan|it may|of unknown|of uncertain|unknown|possibly|clipping|shortening|blend|back-formation|despite|the |this )/i;
+    const proseLines = lines.filter((l) => {
+      if (!l) return false;
+      if (l.includes("*")) return false;
+      if (/^(?:cognates?|related to|compare|see also|descendants|derived|derived terms)\b/i.test(l)) return false;
+      if (/^(?:bor\.|der\.|nom\.|redup\.)$/i.test(l)) return false;
+      if (proseStarter.test(l)) return true;
+      return l.length > 40 && /[.;] /.test(l);
+    });
+    if (proseLines.length) prose = cleanEtymology(proseLines.join(" "));
   }
 
-  // Cut the "Cognate with" / "Compare" / "Descendants" tail - that is where the
-  // foreign-script clutter concentrates.
-  const tailCut = text.search(/\.\s+(?:cognate with|compare|descendants|see also)\b/i);
-  if (tailCut > 40) text = text.slice(0, tailCut + 1);
+  // Cut the "Cognate with" / "Compare" / "Descendants" / "See also" tail.
+  const tailCut = prose.search(/(?:^|\.\s+)(?:cognates?|compare|descendants|see also|related to)\b/i);
+  if (tailCut > 20) prose = prose.slice(0, tailCut);
 
-  // Hard cap at a word boundary with an ellipsis; the full clean text is still
-  // available via the "More" expander below.
-  const MAX_SUMMARY = 280;
-  if (text.length > MAX_SUMMARY) {
-    const cut = text.slice(0, MAX_SUMMARY);
-    const lastSpace = cut.lastIndexOf(" ");
-    text = `${cut.slice(0, lastSpace > 40 ? lastSpace : MAX_SUMMARY).trim()} …`;
+  return { prose, full: cleaned };
+}
+
+// Cut text at the end of the sentence that ends closest to (but not past) a cap,
+// so a summary reads complete rather than chopping mid-clause.
+function sentenceSummary(text, cap = 220) {
+  if (text.length <= cap) return text;
+  const head = text.slice(0, cap);
+  // A sentence ends at a "." followed by whitespace or a closing quote (straight
+  // or curly) plus whitespace/end. Find the rightmost such boundary in the head.
+  const matches = [...head.matchAll(/\.(?=[\s"')\u201d\u2019]|$)/g)];
+  if (matches.length) {
+    const idx = matches[matches.length - 1].index;
+    if (idx > 40) return `${head.slice(0, idx + 1).trim()} …`;
   }
-  return { summary: text, full: cleaned };
+  // Fall back to the bare last period, then a word boundary.
+  const barePeriod = head.lastIndexOf(".");
+  if (barePeriod > 40) return `${head.slice(0, barePeriod + 1).trim()} …`;
+  const spaceIdx = head.lastIndexOf(" ");
+  return `${head.slice(0, spaceIdx > 40 ? spaceIdx : cap).trim()} …`;
 }
 
 function renderOrigin(origin) {
-  const { summary, full } = summarizeEtymology(origin);
+  const { prose, full } = etymologyText(origin);
   const body =
     settings.originFormat === "full"
       ? `<p>${esc(full)}</p>`
-      : summary !== full || origin !== full
-        ? `<p>${esc(summary)}</p>
-    <details class="dslot-origin-more"><summary>More</summary><p>${esc(full)}</p></details>`
-        : `<p>${esc(summary)}</p>`;
+      : prose.length > 320
+        ? `<p>${esc(sentenceSummary(prose, 300))}</p>
+    <details class="dslot-origin-more"><summary>More</summary><p>${esc(prose)}</p></details>`
+        : `<p>${esc(prose)}</p>`;
 
   return `<div class="dslot-origin">
     <div class="dslot-label">${esc(t("origin"))}</div>

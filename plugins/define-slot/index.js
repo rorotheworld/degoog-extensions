@@ -263,8 +263,8 @@ export const slot = {
       type: "url",
       default: DEFAULT_DICTIONARY_SERVER_URL,
       description:
-        "Base URL of the local dictionary-server. Leave as http://dictionary:3000 " +
-        "for this stack's container.",
+        "Base URL of the dictionary-server. The default assumes it runs as a " +
+        "Docker service named 'dictionary'; point this at your instance if not.",
     },
     {
       key: "triggerMode",

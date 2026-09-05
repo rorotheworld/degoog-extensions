@@ -635,7 +635,7 @@ function normalizeDictionaryData(data, requestedWord) {
   const sounds = entries.flatMap((entry) => asArray(entry?.sounds));
   const ipa = sounds.find((s) => s?.ipa)?.ipa || "";
   const audioUrl = firstValidAudioUrl(
-    sounds.map((s) => s?.ogg_url || s?.mp3_url || s?.audio || ""),
+    sounds.map((s) => s?.mp3_url || s?.ogg_url || s?.audio || ""),
   );
   const origin = firstString(entries.map((entry) => entry?.etymology));
 

@@ -10,6 +10,14 @@
       "version": "1.0.0",
       "type": "slot",
       "screenshots": []
+    },
+    {
+      "path": "plugins/define-slot",
+      "name": "Dictionary",
+      "description": "Definitions, pronunciation, synonyms, antonyms, and etymology from the local dictionary-server (Wiktionary via kaikki.org), with PowerThesaurus enrichment. Adapted from SoPat712/degoog-toolkit.",
+      "version": "1.0.0",
+      "type": "slot",
+      "screenshots": []
     }
   ],
   "engines": [

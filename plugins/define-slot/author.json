@@ -1,0 +1,8 @@
+{
+  "name": "roro",
+  "url": "https://github.com/rorotheworld/degoog-extensions",
+  "basedOn": {
+    "name": "SoPat712",
+    "url": "https://github.com/SoPat712/degoog-toolkit"
+  }
+}

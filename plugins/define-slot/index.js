@@ -1,0 +1,1272 @@
+
+let template = "";
+let pluginFetch = (...args) => fetch(...args);
+let pluginRouteBase = "";
+let dictionaryCache = null;
+
+// Local dictionary-server endpoint (see rorotheworld/dictionary-server). Defaults
+// to the container name on the docker_proxy network; override in plugin settings
+// if the deployment copies it elsewhere. Replaces the flaky https://api.
+// dictionaryapi.dev endpoint the original plugin hardcoded.
+const DEFAULT_DICTIONARY_SERVER_URL = "http://dictionary:3000/api/en";
+const POWER_THESAURUS_API_URL = "https://api.powerthesaurus.org";
+const POWER_THESAURUS_WEB_URL = "https://www.powerthesaurus.org";
+const FETCH_TIMEOUT_MS = 8000;
+const AUDIO_HOSTS = new Set([
+  "api.dictionaryapi.dev",
+  "ssl.gstatic.com",
+  "www.gstatic.com",
+  // kaikki.org entries point pronunciation audio at Wikimedia Commons
+  // (ogg_url/mp3_url fields).
+  "commons.wikimedia.org",
+  "upload.wikimedia.org",
+]);
+
+const POWER_THESAURUS_SEARCH_QUERY = `query SEARCH_QUERY($query: String!) {
+  search(query: $query) {
+    terms {
+      id
+      name
+    }
+  }
+}`;
+
+const POWER_THESAURUS_THESAURUS_QUERY = `query THESAURUSES_QUERY($after: String, $first: Int, $before: String, $last: Int, $termID: ID!, $list: List!, $sort: ThesaurusSorting!, $tagID: Int, $posID: Int, $syllables: Int) {
+  thesauruses(termId: $termID, sort: $sort, list: $list, after: $after, first: $first, before: $before, last: $last, tagId: $tagID, partOfSpeechId: $posID, syllables: $syllables) {
+    edges {
+      node {
+        id
+        targetTerm {
+          id
+          name
+          slug
+          counters
+        }
+        relations
+        rating
+        votes
+      }
+    }
+  }
+}`;
+
+const POWER_PARTS_OF_SPEECH = new Map([
+  [1, "adj."],
+  [2, "n."],
+  [3, "pr."],
+  [4, "adv."],
+  [5, "idi."],
+  [6, "v."],
+  [7, "int."],
+  [8, "phr."],
+  [9, "conj."],
+  [10, "prep."],
+  [11, "phr. v."],
+]);
+
+const POWER_USER_AGENT = "Degoog-Define-Slot/1.0";
+// Hard caps on how long either lookup may delay the card. Both stay well under
+// degoog's 10s slot budget, so a hung dictionary server or thesaurus can never
+// blank a dictionary result again. The local server normally answers in <50ms;
+// these deadlines only bind when it is down or the thesaurus is slow.
+const DICT_DEADLINE_MS = 2500;
+const POWER_THESAURUS_DEADLINE_MS = 1500;
+
+function raceWithFallback(promise, ms, fallback) {
+  return Promise.race([
+    promise,
+    new Promise((resolve) => setTimeout(() => resolve(fallback), ms)),
+  ]);
+}
+
+function createExtensionCache(ctx, namespace, ttlMs) {
+  if (typeof ctx?.useCache === "function") {
+    return ctx.useCache(namespace, ttlMs);
+  }
+  return typeof ctx?.createCache === "function"
+    ? ctx.createCache(ttlMs)
+    : null;
+}
+
+async function cacheGet(cache, key) {
+  return cache ? await cache.get(key) : null;
+}
+
+async function cacheSet(cache, key, value, ttlMs) {
+  if (cache) await cache.set(key, value, ttlMs);
+}
+
+const WORD_CAPTURE = "([A-Za-z](?:[A-Za-z'-]{0,46}[A-Za-z])?)";
+const LOOKUP_WORD_RE = /^[A-Za-z](?:[A-Za-z'-]{0,46}[A-Za-z])?$/;
+
+const DEFAULT_SETTINGS = {
+  triggerMode: "keyword",
+  maxDefinitions: 3,
+  maxRelatedTerms: 4,
+  serverUrl: DEFAULT_DICTIONARY_SERVER_URL,
+};
+
+const settings = { ...DEFAULT_SETTINGS };
+
+const QUERY_PATTERNS = [
+  {
+    intent: "definition",
+    pattern: new RegExp(
+      `^!?\\s*(?:define|definition|meaning)\\b(?:\\s+(?:of|for))?\\s*[:=-]?\\s*${WORD_CAPTURE}$`,
+      "i",
+    ),
+  },
+  {
+    intent: "synonym",
+    pattern: new RegExp(
+      `^!?\\s*(?:synonym|synonyms)\\b(?:\\s+(?:for|of))?\\s*[:=-]?\\s*${WORD_CAPTURE}$`,
+      "i",
+    ),
+  },
+  {
+    intent: "antonym",
+    pattern: new RegExp(
+      `^!?\\s*(?:antonym|antonyms)\\b(?:\\s+(?:for|of))?\\s*[:=-]?\\s*${WORD_CAPTURE}$`,
+      "i",
+    ),
+  },
+  {
+    intent: "pronunciation",
+    pattern: new RegExp(
+      `^!?\\s*(?:pronounce|pronunciation)\\b(?:\\s+(?:of|for))?\\s*[:=-]?\\s*${WORD_CAPTURE}$`,
+      "i",
+    ),
+  },
+  {
+    intent: "origin",
+    pattern: new RegExp(
+      `^!?\\s*(?:origin|etymology)\\b(?:\\s+(?:of|for))?\\s*[:=-]?\\s*${WORD_CAPTURE}$`,
+      "i",
+    ),
+  },
+  {
+    intent: "definition",
+    pattern: new RegExp(
+      `^(?:what\\s+is|what's|whats)\\s+(?:the\\s+)?(?:definition|meaning)\\s+of\\s+${WORD_CAPTURE}$`,
+      "i",
+    ),
+  },
+  {
+    intent: "synonym",
+    pattern: new RegExp(
+      `^(?:what\\s+is|what\\s+are|what's|whats)\\s+(?:a\\s+|some\\s+|the\\s+)?(?:synonym|synonyms)\\s+(?:for|of)\\s+${WORD_CAPTURE}$`,
+      "i",
+    ),
+  },
+  {
+    intent: "antonym",
+    pattern: new RegExp(
+      `^(?:what\\s+is|what\\s+are|what's|whats)\\s+(?:a\\s+|some\\s+|the\\s+)?(?:antonym|antonyms)\\s+(?:for|of)\\s+${WORD_CAPTURE}$`,
+      "i",
+    ),
+  },
+  {
+    intent: "pronunciation",
+    pattern: new RegExp(
+      `^how\\s+(?:do\\s+i\\s+)?pronounce\\s+${WORD_CAPTURE}$`,
+      "i",
+    ),
+  },
+  {
+    intent: "definition",
+    pattern: new RegExp(`^what\\s+does\\s+${WORD_CAPTURE}\\s+mean$`, "i"),
+  },
+  {
+    intent: "definition",
+    pattern: new RegExp(`^(?:what\\s+is|what's|whats)\\s+${WORD_CAPTURE}$`, "i"),
+  },
+];
+
+const SINGLE_WORD_BLOCKLIST = new Set([
+  "weather",
+  "forecast",
+  "currency",
+  "convert",
+  "unit",
+  "units",
+  "map",
+  "maps",
+  "sports",
+  "speedtest",
+  "history",
+  "settings",
+  "images",
+  "videos",
+  "news",
+  "calc",
+  "calculator",
+  "graph",
+  "plot",
+  "math",
+  "stopwatch",
+  "timer",
+  "countdown",
+  "coinflip",
+  "yesno",
+  "dice",
+  "die",
+  "stocks",
+  "stock",
+  "tip",
+  "tips",
+  "gratuity",
+  "gratuities",
+  "translate",
+  "translation",
+  "time",
+  "timezone",
+  "clock",
+  "book",
+  "books",
+  "paper",
+  "papers",
+  "music",
+  "movie",
+  "movies",
+  "until",
+]);
+
+const FALLBACK_TEMPLATE = `
+<div class="dslot-card" data-dslot-root data-dslot-word="{{word}}">
+  <div class="dslot-head">
+    <div class="dslot-kicker">Dictionary</div>
+    <div class="dslot-word-line">
+      <h2 class="dslot-word">{{word}}</h2>
+      {{phonetic_html}}
+      {{audio_button}}
+    </div>
+  </div>
+  {{body_html}}
+  {{related_html}}
+  {{origin_html}}
+  <div class="dslot-source">Data: <a href="https://dictionaryapi.dev/" target="_blank" rel="noopener">dictionaryapi.dev</a> · Related: <a href="https://www.powerthesaurus.org/" target="_blank" rel="noopener">Power Thesaurus</a></div>
+</div>`;
+
+export const slot = {
+  id: "define-slot",
+  name: "Dictionary",
+  description:
+    "Shows definitions, pronunciation, synonyms, antonyms, and origin for explicit dictionary queries.",
+  isClientExposed: false,
+  position: "above-results",
+  slotPositions: ["above-results", "knowledge-panel"],
+
+  settingsSchema: [
+    {
+      key: "serverUrl",
+      label: "Dictionary server URL",
+      type: "url",
+      default: DEFAULT_DICTIONARY_SERVER_URL,
+      description:
+        "Base URL of the local dictionary-server. Leave as http://dictionary:3000 " +
+        "for this stack's container.",
+    },
+    {
+      key: "triggerMode",
+      label: "When to show",
+      type: "select",
+      options: ["keyword", "single-word"],
+      default: "keyword",
+      description:
+        "Keyword only reacts to dictionary words like define, synonym, pronounce, origin, and meaning. Single-word also tries plain one-word searches.",
+    },
+    {
+      key: "maxDefinitions",
+      label: "Definitions",
+      type: "select",
+      options: ["2", "3", "5"],
+      default: "3",
+      description: "Maximum number of definitions to show.",
+    },
+    {
+      key: "maxRelatedTerms",
+      label: "Synonyms/antonyms per group",
+      type: "number",
+      default: "4",
+      min: "1",
+      max: "12",
+      step: "1",
+      description: "Maximum number of synonyms and antonyms to show in each group. Use 1-12.",
+    },
+  ],
+
+  init(ctx) {
+    template = ctx?.template || FALLBACK_TEMPLATE;
+    setPluginRouteBase(ctx);
+    if (typeof ctx?.fetch === "function") {
+      pluginFetch = (...args) => ctx.fetch(...args);
+    }
+    dictionaryCache = createExtensionCache(
+      ctx,
+      "ext:define-slot:lookups",
+      6 * 60 * 60 * 1000,
+    );
+  },
+
+  configure(nextSettings) {
+    settings.triggerMode =
+      nextSettings?.triggerMode === "single-word" ? "single-word" : "keyword";
+    settings.maxDefinitions = readBoundedInteger(
+      nextSettings?.maxDefinitions,
+      DEFAULT_SETTINGS.maxDefinitions,
+      1,
+      5,
+    );
+    settings.maxRelatedTerms = readBoundedInteger(
+      nextSettings?.maxRelatedTerms,
+      DEFAULT_SETTINGS.maxRelatedTerms,
+      1,
+      12,
+    );
+    settings.serverUrl = normalizeServerUrl(
+      nextSettings?.serverUrl,
+      DEFAULT_SETTINGS.serverUrl,
+    );
+  },
+
+  trigger(query) {
+    return Boolean(parseDictionaryQuery(query));
+  },
+
+  async execute(query, context) {
+    if (context?.tab && context.tab !== "all") return { html: "" };
+
+    const parsed = parseDictionaryQuery(query);
+    if (!parsed) return { html: "" };
+
+    // The local dictionary answers in ms. PowerThesaurus is external and goes
+    // through degoog's global proxy, so it is raced against a wall-clock deadline
+    // (not a signal, which the proxy path ignores): if the thesaurus is slow or
+    // down, the card still renders from local data alone within budget. This is
+    // the fix for the old plugin blanking entirely when its API hung.
+    const [result, relatedTerms] = await Promise.all([
+      raceWithFallback(
+        lookupDictionary(parsed.word, context),
+        DICT_DEADLINE_MS,
+        { status: "error", data: null },
+      ),
+      raceWithFallback(
+        lookupPowerThesaurus(parsed.word, context),
+        POWER_THESAURUS_DEADLINE_MS,
+        { synonyms: [], antonyms: [] },
+      ),
+    ]);
+
+    if (result.status === "ok") {
+      const entry = normalizeDictionaryData(result.data, parsed.word);
+      entry.synonyms = mergeRelatedTerms(
+        relatedTerms.synonyms,
+        entry.synonyms,
+        "synonym",
+      );
+      entry.antonyms = mergeRelatedTerms(
+        relatedTerms.antonyms,
+        entry.antonyms,
+        "antonym",
+      );
+
+      if (hasRenderableEntry(entry)) {
+        return { html: renderEntry(entry, parsed.intent) };
+      }
+    }
+
+    const relatedOnlyEntry = {
+      word: parsed.word,
+      phonetic: "",
+      audioUrl: "",
+      origin: "",
+      definitions: [],
+      synonyms: relatedTerms.synonyms,
+      antonyms: relatedTerms.antonyms,
+    };
+    if (hasRenderableEntry(relatedOnlyEntry)) {
+      return { html: renderEntry(relatedOnlyEntry, parsed.intent) };
+    }
+
+    if (parsed.explicit && result.status === "not-found") {
+      return { html: renderEmpty(parsed.word) };
+    }
+
+    return { html: "" };
+  },
+};
+
+export const slotPlugin = slot;
+export const routes = [
+  {
+    method: "get",
+    path: "audio",
+    handler: async (request) => {
+      const url = new URL(request.url);
+      const source = normalizeAudioUrl(decodeAudioUrl(url.searchParams.get("src")));
+
+      if (!source) {
+        return new Response("Invalid audio URL", {
+          status: 400,
+          headers: { "Cache-Control": "no-store" },
+        });
+      }
+
+      try {
+        const response = await fetchWithTimeout(pluginFetch, source, {
+          headers: { Accept: "audio/*,*/*;q=0.1" },
+        });
+
+        if (!response.ok) {
+          return new Response("Audio unavailable", {
+            status: 502,
+            headers: { "Cache-Control": "no-store" },
+          });
+        }
+
+        return new Response(response.body, {
+          status: 200,
+          headers: {
+            "Cache-Control": "public, max-age=86400",
+            "Content-Type":
+              response.headers.get("content-type") || "audio/mpeg",
+          },
+        });
+      } catch {
+        return new Response("Audio unavailable", {
+          status: 502,
+          headers: { "Cache-Control": "no-store" },
+        });
+      }
+    },
+  },
+];
+
+export default slot;
+
+function setPluginRouteBase(ctx) {
+  if (ctx?.apiBase) {
+    pluginRouteBase = ctx.apiBase;
+  } else if (typeof ctx?.routeUrl === "function") {
+    pluginRouteBase = ctx.routeUrl();
+  } else {
+    const dir = typeof ctx?.dir === "string" ? ctx.dir : "";
+    const folder = dir.replace(/[\\/]+$/, "").split(/[\\/]/).filter(Boolean).pop();
+    const prefix = ["", "api", "plugin"].join("/");
+    pluginRouteBase = folder ? `${prefix}/${encodeURIComponent(folder)}` : `${prefix}/define-slot`;
+  }
+}
+
+function parseDictionaryQuery(query) {
+  const q = normalizeQuery(query);
+  if (!q) return null;
+
+  for (const { intent, pattern } of QUERY_PATTERNS) {
+    const match = q.match(pattern);
+    if (!match) continue;
+    const word = cleanLookupWord(match[1]);
+    const isWeakWhatIsQuery = /^(?:what\s+is|what's|whats)\b/i.test(q);
+    if (word && !(isWeakWhatIsQuery && SINGLE_WORD_BLOCKLIST.has(word))) {
+      return { word, intent, explicit: true };
+    }
+  }
+
+  if (settings.triggerMode === "single-word") {
+    const word = cleanLookupWord(q);
+    if (word && !SINGLE_WORD_BLOCKLIST.has(word)) {
+      return { word, intent: "definition", explicit: false };
+    }
+  }
+
+  return null;
+}
+
+function normalizeQuery(query) {
+  return String(query || "")
+    .trim()
+    .replace(/\s+/g, " ")
+    .replace(/[?!.,;:]+$/g, "");
+}
+
+function cleanLookupWord(value) {
+  const word = String(value || "")
+    .trim()
+    .replace(/^["'`]+|["'`]+$/g, "")
+    .replace(/[?!.,;:]+$/g, "")
+    .toLowerCase();
+
+  if (!LOOKUP_WORD_RE.test(word)) return "";
+  if (word.replace(/[^a-z]/g, "").length < 2) return "";
+  if (/--|''|^-|-$|^'|'$/.test(word)) return "";
+  return word;
+}
+
+function readBoundedInteger(value, fallback, min, max) {
+  const parsed = Number.parseInt(value, 10);
+  if (!Number.isFinite(parsed)) return fallback;
+  return Math.max(min, Math.min(max, parsed));
+}
+
+function normalizeServerUrl(value, fallback) {
+  const raw = String(value || "").trim().replace(/\/+$/, "");
+  return /^https?:\/\//i.test(raw) ? raw : fallback;
+}
+
+async function lookupDictionary(word, context) {
+  const cacheKey = `en:${word}`;
+  const cached = await cacheGet(dictionaryCache, cacheKey);
+  if (cached) return cached;
+
+  const fetcher =
+    typeof context?.fetch === "function" ? (...args) => context.fetch(...args) : pluginFetch;
+
+  try {
+    const response = await fetchWithTimeout(
+      fetcher,
+      `${settings.serverUrl}/${encodeURIComponent(word)}`,
+      { headers: { Accept: "application/json" } },
+    );
+
+    if (response.status === 404) {
+      const result = { status: "not-found", data: null };
+      await cacheSet(dictionaryCache, cacheKey, result, 30 * 60 * 1000);
+      return result;
+    }
+
+    if (!response.ok) return { status: "error", data: null };
+
+    const data = await response.json();
+    if (!data?.entries?.length) {
+      return { status: "not-found", data: null };
+    }
+
+    const result = { status: "ok", data };
+    await cacheSet(dictionaryCache, cacheKey, result);
+    return result;
+  } catch {
+    return { status: "error", data: null };
+  }
+}
+
+function normalizeDictionaryData(data, requestedWord) {
+  // Local dictionary-server shape:
+  // { word, entries: [ { pos, senses:[{glosses, examples, tags, synonyms,
+  //   antonyms}], sounds:[{ipa, ogg_url, mp3_url}], forms, translations,
+  //   etymology, related:{derived, related, synonyms, antonyms} } ] }
+  const entries = Array.isArray(data?.entries) ? data.entries : [];
+  const word = String(data?.word || requestedWord || "").trim();
+  const definitions = [];
+  const synonyms = new Map();
+  const antonyms = new Map();
+
+  for (const entry of entries) {
+    const partOfSpeech = String(entry?.pos || "").trim();
+    for (const sense of asArray(entry?.senses)) {
+      collectTerms(synonyms, sense.synonyms);
+      collectTerms(antonyms, sense.antonyms);
+
+      for (const gloss of asArray(sense?.glosses)) {
+        if (!gloss) continue;
+        definitions.push({
+          partOfSpeech,
+          definition: String(gloss).trim(),
+          example: firstString(
+            asArray(sense?.examples).map((ex) =>
+              typeof ex === "string" ? ex : ex?.text || ex?.example || "",
+            ),
+          ),
+        });
+      }
+    }
+
+    // Word-level link lists live under entry.related.
+    collectRelated(entry?.related, synonyms, antonyms);
+  }
+
+  const sounds = entries.flatMap((entry) => asArray(entry?.sounds));
+  const ipa = sounds.find((s) => s?.ipa)?.ipa || "";
+  const audioUrl = firstValidAudioUrl(
+    sounds.map((s) => s?.ogg_url || s?.mp3_url || s?.audio || ""),
+  );
+  const origin = firstString(entries.map((entry) => entry?.etymology));
+
+  return {
+    word,
+    phonetic: String(ipa || "").trim(),
+    audioUrl,
+    origin,
+    definitions,
+    synonyms: [...synonyms.values()].map((wd) => makeSimpleRelatedTerm(wd, "synonym")),
+    antonyms: [...antonyms.values()].map((wd) => makeSimpleRelatedTerm(wd, "antonym")),
+  };
+}
+
+// A kaikki entry's related object can be { synonym, synonym, related, derived }
+// or an array of link objects (both are handled by collectTerms which accepts
+// strings and objects with .word/.name).
+function collectRelated(related, synonyms, antonyms) {
+  if (!related || typeof related !== "object") return;
+  if (Array.isArray(related.synonyms)) collectTerms(synonyms, related.synonyms);
+  if (Array.isArray(related.antonyms)) collectTerms(antonyms, related.antonyms);
+  // "derived" and "related" are related words, useful in the synonym row.
+  if (Array.isArray(related.derived)) collectTerms(synonyms, related.derived);
+  if (Array.isArray(related.related)) collectTerms(synonyms, related.related);
+}
+
+async function lookupPowerThesaurus(word, context) {
+  const cacheKey = `power:${word}`;
+  const cached = await cacheGet(dictionaryCache, cacheKey);
+  if (cached) return cached;
+
+  const fetcher =
+    typeof context?.fetch === "function" ? (...args) => context.fetch(...args) : pluginFetch;
+
+  const result = await lookupPowerThesaurusGraphql(word, fetcher).catch(() => ({
+    synonyms: [],
+    antonyms: [],
+  }));
+
+  if (!result.synonyms.length && !result.antonyms.length) {
+    const fallback = await lookupPowerThesaurusWeb(word, fetcher).catch(() => ({
+      synonyms: [],
+      antonyms: [],
+    }));
+    result.synonyms = fallback.synonyms;
+    result.antonyms = fallback.antonyms;
+  }
+
+  const ttl = result.synonyms.length || result.antonyms.length
+    ? 12 * 60 * 60 * 1000
+    : 15 * 60 * 1000;
+  await cacheSet(dictionaryCache, cacheKey, result, ttl);
+  return result;
+}
+
+async function lookupPowerThesaurusGraphql(word, fetcher) {
+  const term = await searchPowerThesaurusTerm(word, fetcher);
+  if (!term?.id) return { synonyms: [], antonyms: [] };
+
+  const [synonyms, antonyms] = await Promise.all([
+    fetchPowerThesaurusList(term.id, "synonym", fetcher),
+    fetchPowerThesaurusList(term.id, "antonym", fetcher),
+  ]);
+
+  return { synonyms, antonyms };
+}
+
+async function searchPowerThesaurusTerm(word, fetcher) {
+  const json = await postPowerThesaurus(fetcher, {
+    operationName: "SEARCH_QUERY",
+    variables: { query: word },
+    query: POWER_THESAURUS_SEARCH_QUERY,
+  });
+
+  const terms = Array.isArray(json?.data?.search?.terms)
+    ? json.data.search.terms
+    : [];
+  const normalizedWord = normalizeTermKey(word);
+  return (
+    terms.find((term) => normalizeTermKey(term?.name) === normalizedWord) ||
+    null
+  );
+}
+
+async function fetchPowerThesaurusList(termId, kind, fetcher) {
+  const json = await postPowerThesaurus(fetcher, {
+    operationName: "THESAURUSES_QUERY",
+    variables: {
+      list: kind.toUpperCase(),
+      termID: termId,
+      sort: { field: "RATING", direction: "DESC" },
+      limit: 50,
+      syllables: null,
+      query: null,
+      posID: null,
+      first: 50,
+      after: "",
+    },
+    query: POWER_THESAURUS_THESAURUS_QUERY,
+  });
+
+  const edges = Array.isArray(json?.data?.thesauruses?.edges)
+    ? json.data.thesauruses.edges
+    : [];
+  return dedupePowerTerms(
+    edges
+      .map((edge) => normalizePowerTerm(edge?.node, kind))
+      .filter(Boolean),
+  );
+}
+
+async function postPowerThesaurus(fetcher, payload) {
+  const response = await fetchWithTimeout(fetcher, POWER_THESAURUS_API_URL, {
+    method: "POST",
+    headers: {
+      Accept: "application/json",
+      "Content-Type": "application/json",
+      "User-Agent": POWER_USER_AGENT,
+    },
+    body: JSON.stringify(payload),
+  });
+
+  if (!response.ok) {
+    throw new Error(`Power Thesaurus returned ${response.status}`);
+  }
+
+  const json = await response.json();
+  if (Array.isArray(json?.errors) && json.errors.length) {
+    throw new Error("Power Thesaurus returned GraphQL errors");
+  }
+  return json;
+}
+
+async function lookupPowerThesaurusWeb(word, fetcher) {
+  const [synonyms, antonyms] = await Promise.all([
+    fetchPowerThesaurusWebList(word, "synonym", fetcher),
+    fetchPowerThesaurusWebList(word, "antonym", fetcher),
+  ]);
+  return { synonyms, antonyms };
+}
+
+async function fetchPowerThesaurusWebList(word, kind, fetcher) {
+  const url = buildPowerTermUrl(word, kind);
+  const response = await fetchWithTimeout(fetcher, url, {
+    headers: {
+      Accept: "text/html,application/xhtml+xml",
+      "User-Agent": POWER_USER_AGENT,
+    },
+  });
+  if (!response.ok) return [];
+
+  const html = await response.text();
+  if (isCloudflareChallenge(html)) return [];
+
+  const terms = [
+    ...extractPowerTermsFromJson(html, kind),
+    ...extractPowerTermsFromHtml(html, kind),
+  ];
+  return dedupePowerTerms(terms);
+}
+
+function extractPowerTermsFromJson(html, kind) {
+  const jsonText = extractNextDataJson(html);
+  if (!jsonText) return [];
+
+  try {
+    const data = JSON.parse(decodeHtmlEntities(jsonText));
+    const terms = [];
+    walkPowerJson(data, kind, terms);
+    return terms;
+  } catch {
+    return [];
+  }
+}
+
+function walkPowerJson(value, kind, terms) {
+  if (!value || terms.length >= 80) return;
+
+  if (Array.isArray(value)) {
+    for (const item of value) walkPowerJson(item, kind, terms);
+    return;
+  }
+
+  if (typeof value !== "object") return;
+
+  const term = normalizePowerTerm(value, kind);
+  if (term) terms.push(term);
+
+  for (const next of Object.values(value)) {
+    walkPowerJson(next, kind, terms);
+  }
+}
+
+function extractPowerTermsFromHtml(html, kind) {
+  const terms = [];
+  const itemPattern =
+    /<a\b[^>]*href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi;
+  let match;
+
+  while ((match = itemPattern.exec(html)) && terms.length < 80) {
+    const href = decodeHtmlEntities(match[1]);
+    const text = cleanHtmlText(match[2]);
+    if (!text || text.length > 64) continue;
+    if (!isLikelyPowerTermUrl(href, kind, text)) continue;
+
+    terms.push(
+      normalizePowerTerm(
+        {
+          word: text,
+          url: href.startsWith("http")
+            ? href
+            : `${POWER_THESAURUS_WEB_URL}${href.startsWith("/") ? "" : "/"}${href}`,
+        },
+        kind,
+      ),
+    );
+  }
+
+  return terms;
+}
+
+function normalizePowerTerm(value, kind) {
+  if (!value) return null;
+
+  const targetTerm = value.targetTerm || value.term || value.target || {};
+  const word = cleanRelatedWord(
+    targetTerm.name || value.word || value.name || value.title,
+  );
+  if (!word) return null;
+
+  const relations = value.relations || {};
+  const slug = targetTerm.slug || value.slug || slugifyPowerTerm(word);
+  const rating = finiteNumber(value.rating ?? value.votes ?? value.score);
+  const partsOfSpeech = normalizePowerParts(
+    relations.parts_of_speech ||
+      relations.partsOfSpeech ||
+      value.parts_of_speech ||
+      value.partsOfSpeech ||
+      value.parts,
+  );
+  const tags = normalizeStringList(
+    relations.tags || value.tags || value.topics || value.subjects,
+  );
+
+  return {
+    word,
+    rating,
+    partsOfSpeech,
+    tags,
+    url: sanitizePowerUrl(value.url) || buildPowerTermUrl(slug, kind),
+  };
+}
+
+function makeSimpleRelatedTerm(word, kind) {
+  return {
+    word,
+    rating: null,
+    partsOfSpeech: [],
+    tags: [],
+    url: buildPowerTermUrl(word, kind),
+  };
+}
+
+function mergeRelatedTerms(primaryTerms, fallbackTerms, kind) {
+  const primary = Array.isArray(primaryTerms) ? primaryTerms : [];
+  const fallback = Array.isArray(fallbackTerms) ? fallbackTerms : [];
+  return dedupePowerTerms([
+    ...primary,
+    ...fallback.map((term) =>
+      typeof term === "string" ? makeSimpleRelatedTerm(term, kind) : term,
+    ),
+  ]);
+}
+
+function dedupePowerTerms(terms) {
+  const seen = new Set();
+  const deduped = [];
+
+  for (const term of terms) {
+    const normalized = normalizePowerTerm(term, "synonym");
+    if (!normalized) continue;
+    const key = normalizeTermKey(normalized.word);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    deduped.push(normalized);
+  }
+
+  return deduped.sort(comparePowerTerms);
+}
+
+function comparePowerTerms(a, b) {
+  const aRating = Number.isFinite(a.rating) ? a.rating : -Infinity;
+  const bRating = Number.isFinite(b.rating) ? b.rating : -Infinity;
+  if (bRating !== aRating) return bRating - aRating;
+  return a.word.localeCompare(b.word);
+}
+
+function normalizePowerParts(value) {
+  return normalizeStringList(value)
+    .map((part) => {
+      const numeric = Number.parseInt(part, 10);
+      if (POWER_PARTS_OF_SPEECH.has(numeric)) {
+        return POWER_PARTS_OF_SPEECH.get(numeric);
+      }
+      return part;
+    })
+    .filter(Boolean)
+    .slice(0, 3);
+}
+
+function normalizeStringList(value) {
+  if (!Array.isArray(value)) return [];
+
+  const seen = new Set();
+  const list = [];
+  for (const item of value) {
+    const text = cleanRelatedMeta(
+      typeof item === "object"
+        ? item?.name || item?.title || item?.slug || item?.label
+        : item,
+    );
+    if (!text) continue;
+    const key = text.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    list.push(text);
+  }
+  return list;
+}
+
+function cleanRelatedWord(value) {
+  const word = String(value || "")
+    .trim()
+    .replace(/\s+/g, " ")
+    .replace(/^["'`]+|["'`]+$/g, "")
+    .slice(0, 80);
+  return /[A-Za-z]/.test(word) ? word : "";
+}
+
+function cleanRelatedMeta(value) {
+  return String(value || "")
+    .trim()
+    .replace(/\s+/g, " ")
+    .replace(/^#+/, "")
+    .slice(0, 36);
+}
+
+function normalizeTermKey(value) {
+  return String(value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, " ");
+}
+
+function finiteNumber(value) {
+  const number = Number(value);
+  return Number.isFinite(number) ? number : null;
+}
+
+function buildPowerTermUrl(slugOrWord, kind) {
+  const list = kind === "antonym" ? "antonyms" : "synonyms";
+  const slug = slugifyPowerTerm(slugOrWord);
+  return `${POWER_THESAURUS_WEB_URL}/${encodeURIComponent(slug)}/${list}`;
+}
+
+function slugifyPowerTerm(value) {
+  return String(value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/['"]/g, "")
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "");
+}
+
+function sanitizePowerUrl(value) {
+  const raw = String(value || "").trim();
+  if (!raw) return "";
+
+  try {
+    const url = new URL(raw, POWER_THESAURUS_WEB_URL);
+    if (url.protocol !== "https:") return "";
+    if (url.hostname !== "www.powerthesaurus.org") return "";
+    return url.toString();
+  } catch {
+    return "";
+  }
+}
+
+function extractNextDataJson(html) {
+  const match = String(html || "").match(
+    /<script\b[^>]*id=["']__NEXT_DATA__["'][^>]*>([\s\S]*?)<\/script>/i,
+  );
+  return match?.[1] || "";
+}
+
+function isCloudflareChallenge(html) {
+  const text = String(html || "").toLowerCase();
+  return text.includes("cf_chl") || text.includes("just a moment...");
+}
+
+function isLikelyPowerTermUrl(href, kind, text) {
+  const normalizedHref = String(href || "").toLowerCase();
+  if (!normalizedHref.includes(kind === "antonym" ? "antonym" : "synonym")) {
+    return false;
+  }
+  const slug = slugifyPowerTerm(text);
+  return slug && normalizedHref.includes(slug);
+}
+
+function cleanHtmlText(html) {
+  return decodeHtmlEntities(
+    String(html || "")
+      .replace(/<script[\s\S]*?<\/script>/gi, " ")
+      .replace(/<style[\s\S]*?<\/style>/gi, " ")
+      .replace(/<[^>]+>/g, " "),
+  )
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function decodeHtmlEntities(value) {
+  return String(value || "")
+    .replace(/&quot;/g, '"')
+    .replace(/&#34;/g, '"')
+    .replace(/&#x22;/gi, '"')
+    .replace(/&#039;/g, "'")
+    .replace(/&#39;/g, "'")
+    .replace(/&apos;/g, "'")
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">");
+}
+
+function hasRenderableEntry(entry) {
+  return Boolean(
+    entry.definitions.length ||
+      entry.synonyms.length ||
+      entry.antonyms.length ||
+      entry.origin ||
+      entry.phonetic,
+  );
+}
+
+function asArray(value) {
+  return Array.isArray(value) ? value : [];
+}
+
+function firstString(values) {
+  for (const value of values) {
+    const text = String(value || "").trim();
+    if (text) return text;
+  }
+  return "";
+}
+
+function collectTerms(target, terms) {
+  for (const term of asArray(terms)) {
+    const raw =
+      typeof term === "string" ? term : term?.word || term?.name || term?.text;
+    const normalized = String(raw || "").trim().replace(/\s+/g, " ");
+    if (!normalized || normalized.length > 64) continue;
+    const key = normalized.toLowerCase();
+    if (!target.has(key)) target.set(key, normalized);
+  }
+}
+
+function firstValidAudioUrl(phonetics) {
+  for (const item of phonetics) {
+    const url = normalizeAudioUrl(typeof item === "string" ? item : item?.audio);
+    if (url) return url;
+  }
+  return "";
+}
+
+function normalizeAudioUrl(value) {
+  let raw = String(value || "").trim();
+  if (!raw) return "";
+  if (raw.startsWith("//")) raw = `https:${raw}`;
+  if (raw.startsWith("/")) raw = `https://api.dictionaryapi.dev${raw}`;
+
+  try {
+    const url = new URL(raw);
+    if (url.protocol !== "https:" && url.protocol !== "http:") return "";
+    if (!AUDIO_HOSTS.has(url.hostname)) return "";
+
+    const path = url.pathname.toLowerCase();
+    const isKnownAudioPath =
+      path.includes("/media/pronunciations/") ||
+      path.includes("/dictionary/static/sounds/") ||
+      /\.(?:mp3|wav|ogg)$/.test(path);
+
+    return isKnownAudioPath ? url.toString() : "";
+  } catch {
+    return "";
+  }
+}
+
+async function fetchWithTimeout(fetcher, url, init = {}) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+  try {
+    return await fetcher(url, { ...init, signal: controller.signal });
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+function renderEntry(entry, intent) {
+  const audioRoute = entry.audioUrl
+    ? `${pluginRouteBase}/audio?src=${encodeURIComponent(encodeAudioUrl(entry.audioUrl))}`
+    : "";
+
+  return applyTemplate({
+    word: esc(entry.word),
+    phonetic_html: entry.phonetic
+      ? `<span class="dslot-phonetic">${esc(entry.phonetic)}</span>`
+      : "",
+    audio_button: audioRoute ? renderAudioButton(audioRoute, entry.word) : "",
+    body_html: renderDefinitions(entry.definitions),
+    related_html: renderRelated(entry.synonyms, entry.antonyms, intent),
+    origin_html: entry.origin ? renderOrigin(entry.origin) : "",
+  });
+}
+
+function renderEmpty(word) {
+  return applyTemplate({
+    word: esc(word),
+    phonetic_html: "",
+    audio_button: "",
+    body_html: `<div class="dslot-empty">${t("noDefinition")} <strong>${esc(word)}</strong>.</div>`,
+    related_html: "",
+    origin_html: "",
+  });
+}
+
+function applyTemplate(replacements) {
+  let html = template || FALLBACK_TEMPLATE;
+  for (const [key, value] of Object.entries(replacements)) {
+    html = html.split(`{{${key}}}`).join(String(value ?? ""));
+  }
+  return html;
+}
+
+function renderAudioButton(audioRoute, word) {
+  return `<button class="dslot-audio" type="button" data-dslot-audio="${escAttr(audioRoute)}" aria-label="${t("playPronunciationFor")} ${escAttr(word)}" aria-pressed="false" title="${t("playPronunciation")}">
+    <svg class="dslot-audio-icon" viewBox="0 0 20 20" aria-hidden="true">
+      <path d="M3 8v4h3l4 3V5L6 8H3z"></path>
+      <path d="M13 7.2a4 4 0 0 1 0 5.6"></path>
+      <path d="M15.2 5a7 7 0 0 1 0 10"></path>
+    </svg>
+  </button>`;
+}
+
+function renderDefinitions(definitions) {
+  const visibleDefinitions = definitions.slice(0, settings.maxDefinitions);
+  const rows = visibleDefinitions
+    .map((item, index) => {
+      const partOfSpeech = item.partOfSpeech
+        ? `<span class="dslot-pos">${esc(item.partOfSpeech)}</span>`
+        : "";
+      const example = item.example
+        ? `<div class="dslot-example">${esc(item.example)}</div>`
+        : "";
+
+      return `<li class="dslot-def">
+        <span class="dslot-def-num">${index + 1}</span>
+        <div class="dslot-def-copy">
+          <div class="dslot-def-line">${partOfSpeech}<span class="dslot-def-text">${esc(item.definition)}</span></div>
+          ${example}
+        </div>
+      </li>`;
+    })
+    .join("");
+
+  return `<ol class="dslot-definitions">${rows}</ol>`;
+}
+
+function renderRelated(synonyms, antonyms, intent) {
+  const groups = [];
+  const synonymGroup = renderRelatedGroup("Synonyms", synonyms, "synonym");
+  const antonymGroup = renderRelatedGroup("Antonyms", antonyms, "antonym");
+
+  if (intent === "antonym") {
+    if (antonymGroup) groups.push(antonymGroup);
+    if (synonymGroup) groups.push(synonymGroup);
+  } else {
+    if (synonymGroup) groups.push(synonymGroup);
+    if (antonymGroup) groups.push(antonymGroup);
+  }
+
+  if (!groups.length) return "";
+  return `<div class="dslot-related">${groups.join("")}</div>`;
+}
+
+function renderRelatedGroup(label, terms, kind) {
+  const visibleTerms = terms.slice(0, settings.maxRelatedTerms);
+  if (!visibleTerms.length) return "";
+
+  const remaining = Math.max(0, terms.length - visibleTerms.length);
+  const tags = visibleTerms.map((term) => renderTerm(term, kind)).join("");
+  const serializedTerms = escAttr(JSON.stringify(terms));
+  const more = remaining
+    ? `<button class="dslot-more" type="button" data-dslot-more-kind="${escAttr(kind)}" data-dslot-more-terms="${serializedTerms}">+${remaining} ${t("moreFromPower")}</button>`
+    : "";
+
+  return `<div class="dslot-related-group">
+    <div class="dslot-label">${esc(label)}</div>
+    <div class="dslot-tags">${tags}${more}</div>
+  </div>`;
+}
+
+function renderTerm(term, kind) {
+  const item =
+    typeof term === "string" ? makeSimpleRelatedTerm(term, kind) : term;
+  const word = cleanRelatedWord(item?.word);
+  if (!word) return "";
+
+  const lookupWord = cleanLookupWord(word);
+  const rating =
+    Number.isFinite(item.rating) && item.rating !== 0
+      ? `<span class="dslot-rating" title="Power Thesaurus rating">${esc(item.rating)}</span>`
+      : "";
+  const parts = item.partsOfSpeech?.length
+    ? `<span class="dslot-term-meta">${esc(item.partsOfSpeech.join(", "))}</span>`
+    : "";
+  const tags = item.tags?.length
+    ? `<span class="dslot-term-tags">${item.tags
+        .slice(0, 3)
+        .map((tag) => `<span>#${esc(tag)}</span>`)
+        .join("")}</span>`
+    : "";
+  const wordControl = lookupWord
+    ? `<button class="dslot-term-word dslot-tag-button" type="button" data-dslot-lookup="${escAttr(lookupWord)}" aria-label="Look up ${escAttr(kind)} ${escAttr(word)}">${esc(word)}</button>`
+    : `<span class="dslot-term-word">${esc(word)}</span>`;
+
+  return `<span class="dslot-term">
+    <span class="dslot-term-main">${wordControl}${rating}</span>
+    ${parts || tags ? `<span class="dslot-term-detail">${parts}${tags}</span>` : ""}
+  </span>`;
+}
+
+function renderOrigin(origin) {
+  return `<div class="dslot-origin">
+    <div class="dslot-label">${esc(t("origin"))}</div>
+    <p>${esc(origin)}</p>
+  </div>`;
+}
+
+function encodeAudioUrl(url) {
+  return Buffer.from(String(url), "utf8")
+    .toString("base64")
+    .replace(/\+/g, "-")
+    .replace(/\//g, "_")
+    .replace(/=+$/g, "");
+}
+
+function decodeAudioUrl(value) {
+  const raw = String(value || "");
+  if (!raw) return "";
+  const padded = raw.replace(/-/g, "+").replace(/_/g, "/");
+  try {
+    return Buffer.from(padded, "base64").toString("utf8");
+  } catch {
+    return "";
+  }
+}
+
+function esc(value) {
+  return String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+}
+
+function escAttr(value) {
+  return esc(value).replace(/`/g, "&#096;");
+}
+
+function t(key) {
+  return `{{ t:plugin-define-slot.${key} }}`;
+}

@@ -335,6 +335,42 @@
   line-height: 1.5;
 }
 
+/* "More" expander for split summary/full etymology. Collapsed summary reads as
+   one line; opening reveals the full clean text. */
+.dslot-origin-more {
+  margin-top: 6px;
+  font-size: 0.9rem;
+}
+
+.dslot-origin-more summary {
+  cursor: pointer;
+  color: var(--text-link, var(--dslot-accent, #4285f4));
+  list-style: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  user-select: none;
+}
+
+.dslot-origin-more summary::before {
+  content: "▸";
+  display: inline-block;
+  transition: transform 0.12s ease;
+}
+
+.dslot-origin-more[open] summary::before {
+  transform: rotate(90deg);
+}
+
+.dslot-origin-more summary::-webkit-details-marker {
+  display: none;
+}
+
+.dslot-origin-more p {
+  margin-top: 6px;
+  color: var(--text-secondary, #5f6368);
+}
+
 .dslot-empty {
   color: var(--text-secondary, #5f6368);
   font-size: 0.96rem;

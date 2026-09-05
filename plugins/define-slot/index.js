@@ -104,6 +104,9 @@ const DEFAULT_SETTINGS = {
   maxDefinitions: 3,
   maxRelatedTerms: 4,
   serverUrl: DEFAULT_DICTIONARY_SERVER_URL,
+  showOrigin: true,
+  originFormat: "summary",
+  showExamples: true,
 };
 
 const settings = { ...DEFAULT_SETTINGS };
@@ -244,7 +247,7 @@ const FALLBACK_TEMPLATE = `
   {{body_html}}
   {{related_html}}
   {{origin_html}}
-  <div class="dslot-source">Data: <a href="https://dictionaryapi.dev/" target="_blank" rel="noopener">dictionaryapi.dev</a> · Related: <a href="https://www.powerthesaurus.org/" target="_blank" rel="noopener">Power Thesaurus</a></div>
+  <div class="dslot-source">Data: <a href="https://kaikki.org" target="_blank" rel="noopener">Wiktionary via kaikki.org</a> · Related: <a href="https://www.powerthesaurus.org/" target="_blank" rel="noopener">Power Thesaurus</a></div>
 </div>`;
 
 export const slot = {
@@ -293,6 +296,33 @@ export const slot = {
       step: "1",
       description: "Maximum number of synonyms and antonyms to show in each group. Use 1-12.",
     },
+    {
+      key: "showOrigin",
+      label: "Show origin/etymology",
+      type: "toggle",
+      default: true,
+      fieldset: "Display",
+      description: "Show the word's origin/etymology when the data has one.",
+    },
+    {
+      key: "originFormat",
+      label: "Origin detail",
+      type: "select",
+      options: ["summary", "full"],
+      default: "summary",
+      fieldset: "Display",
+      description:
+        "summary shows the plain-language derivation and collapses long " +
+        "etymology trees; full shows the raw etymology text.",
+    },
+    {
+      key: "showExamples",
+      label: "Show example sentences",
+      type: "toggle",
+      default: true,
+      fieldset: "Display",
+      description: "Show example sentences alongside definitions when present.",
+    },
   ],
 
   init(ctx) {
@@ -327,6 +357,16 @@ export const slot = {
       nextSettings?.serverUrl,
       DEFAULT_SETTINGS.serverUrl,
     );
+    settings.showOrigin =
+      nextSettings?.showOrigin === undefined
+        ? DEFAULT_SETTINGS.showOrigin
+        : _bool(nextSettings.showOrigin);
+    settings.originFormat =
+      nextSettings?.originFormat === "full" ? "full" : "summary";
+    settings.showExamples =
+      nextSettings?.showExamples === undefined
+        ? DEFAULT_SETTINGS.showExamples
+        : _bool(nextSettings.showExamples);
   },
 
   trigger(query) {
@@ -510,6 +550,15 @@ function readBoundedInteger(value, fallback, min, max) {
 function normalizeServerUrl(value, fallback) {
   const raw = String(value || "").trim().replace(/\/+$/, "");
   return /^https?:\/\//i.test(raw) ? raw : fallback;
+}
+
+// Degoog stores toggles as the string "false", and Boolean("false") is true.
+function _bool(v) {
+  return v === true || v === "true"
+    ? true
+    : v === false || v === "false"
+      ? false
+      : Boolean(v);
 }
 
 async function lookupDictionary(word, context) {
@@ -1107,7 +1156,8 @@ function renderEntry(entry, intent) {
     audio_button: audioRoute ? renderAudioButton(audioRoute, entry.word) : "",
     body_html: renderDefinitions(entry.definitions),
     related_html: renderRelated(entry.synonyms, entry.antonyms, intent),
-    origin_html: entry.origin ? renderOrigin(entry.origin) : "",
+    origin_html:
+      entry.origin && settings.showOrigin ? renderOrigin(entry.origin) : "",
   });
 }
 
@@ -1147,9 +1197,10 @@ function renderDefinitions(definitions) {
       const partOfSpeech = item.partOfSpeech
         ? `<span class="dslot-pos">${esc(item.partOfSpeech)}</span>`
         : "";
-      const example = item.example
-        ? `<div class="dslot-example">${esc(item.example)}</div>`
-        : "";
+      const example =
+        settings.showExamples && item.example
+          ? `<div class="dslot-example">${esc(item.example)}</div>`
+          : "";
 
       return `<li class="dslot-def">
         <span class="dslot-def-num">${index + 1}</span>
@@ -1228,10 +1279,73 @@ function renderTerm(term, kind) {
   </span>`;
 }
 
+// Clean raw etymology text into readable prose: collapse newlines and repeated
+// whitespace, tidy quotes, and drop the orphaned "'s/'" artifacts that survive
+// from Wiktionary template markup.
+function cleanEtymology(text) {
+  let out = String(text || "")
+    .replace(/\s+/g, " ")
+    .replace(/&#39;/g, "'")
+    .replace(/&quot;/g, '"')
+    .replace(/'"|"'|''/g, "'")
+    .replace(/\s+([,.;:'"])/g, "$1")
+    .trim();
+  return out;
+}
+
+// Reduce a cleaned etymology to its plain-language core.
+//
+// A full Wiktionary etymology is heavy: it can start with an "Etymology tree" of
+// proto-language links (often in foreign scripts), then a long prose paragraph,
+// then a "Cognate with" / "Compare" tail. For the summary view we keep only the
+// prose that actually explains the word, cut sentence-ish at a sensible length.
+function summarizeEtymology(raw) {
+  const cleaned = cleanEtymology(raw);
+
+  // If the text is a line-broken tree dump, the readable derivation is the last
+  // long line (the one that reaches the modern word). Take the longest sentence
+  // fragment that runs to the end.
+  let text = cleaned;
+  const startsWithTree = /^etymology tree/i.test(raw);
+  if (startsWithTree) {
+    const lines = String(raw)
+      .split(/\n+/)
+      .map((l) => l.trim())
+      .filter(Boolean);
+    // Prefer the last line containing a terminal period and more than a token.
+    const prose = [...lines].reverse().find((l) => /\.$/.test(l) && l.length > 40);
+    if (prose) text = cleanEtymology(prose);
+  }
+
+  // Cut the "Cognate with" / "Compare" / "Descendants" tail - that is where the
+  // foreign-script clutter concentrates.
+  const tailCut = text.search(/\.\s+(?:cognate with|compare|descendants|see also)\b/i);
+  if (tailCut > 40) text = text.slice(0, tailCut + 1);
+
+  // Hard cap at a word boundary with an ellipsis; the full clean text is still
+  // available via the "More" expander below.
+  const MAX_SUMMARY = 280;
+  if (text.length > MAX_SUMMARY) {
+    const cut = text.slice(0, MAX_SUMMARY);
+    const lastSpace = cut.lastIndexOf(" ");
+    text = `${cut.slice(0, lastSpace > 40 ? lastSpace : MAX_SUMMARY).trim()} …`;
+  }
+  return { summary: text, full: cleaned };
+}
+
 function renderOrigin(origin) {
+  const { summary, full } = summarizeEtymology(origin);
+  const body =
+    settings.originFormat === "full"
+      ? `<p>${esc(full)}</p>`
+      : summary !== full || origin !== full
+        ? `<p>${esc(summary)}</p>
+    <details class="dslot-origin-more"><summary>More</summary><p>${esc(full)}</p></details>`
+        : `<p>${esc(summary)}</p>`;
+
   return `<div class="dslot-origin">
     <div class="dslot-label">${esc(t("origin"))}</div>
-    <p>${esc(origin)}</p>
+    ${body}
   </div>`;
 }
 

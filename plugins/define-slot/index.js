@@ -454,7 +454,13 @@ export const routes = [
 
       try {
         const response = await fetchWithTimeout(pluginFetch, source, {
-          headers: { Accept: "audio/*,*/*;q=0.1" },
+          headers: {
+            Accept: "audio/*,*/*;q=0.1",
+            // Wikimedia's robot policy rejects requests without a User-Agent
+            // (HTTP 403, "Please set a user-agent"). The proxy fetch path
+            // otherwise sends no UA.
+            "User-Agent": "degoog-dictionary/1.0 (self-hosted dictionary card)",
+          },
         });
 
         if (!response.ok) {

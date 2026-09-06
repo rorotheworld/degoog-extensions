@@ -51,15 +51,22 @@
   line-height: 1.35;
 }
 
-/* Per-word source hotlinks (Wiktionary / Cambridge / Power Thesaurus), pushed
-   to the right end of the word line to fill its deadspace. Quiet secondary
-   text that brightens on hover, matching the kicker/source language. */
+/* Per-word source hotlinks (Wiktionary / Cambridge / Power Thesaurus). They
+   live on the kicker row (top of the card, right-aligned) so their width never
+   collides with a long word or adds a wrapped row - the kicker row is always
+   nearly empty. Quiet secondary text that brightens on hover. */
+.dslot-kicker-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
 .dslot-srclinks {
   display: inline-flex;
   align-items: center;
   gap: 8px;
   margin-left: auto;
-  padding-left: 10px;
   font-size: 0.7rem;
   line-height: 1;
 }

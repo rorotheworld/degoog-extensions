@@ -5,12 +5,14 @@
   data-t-close="{{ t:plugin-define-slot.close }}"
 >
   <div class="dslot-head">
-    <div class="dslot-kicker">{{ t:plugin-define-slot.dictionary }}</div>
+    <div class="dslot-kicker-row">
+      <div class="dslot-kicker">{{ t:plugin-define-slot.dictionary }}</div>
+      {{source_links_html}}
+    </div>
     <div class="dslot-word-line">
       <h2 class="dslot-word">{{word}}</h2>
       {{phonetic_html}}
       {{audio_button}}
-      {{source_links_html}}
     </div>
   </div>
   {{body_html}}

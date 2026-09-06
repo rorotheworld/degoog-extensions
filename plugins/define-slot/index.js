@@ -240,7 +240,11 @@ const SINGLE_WORD_BLOCKLIST = new Set([
 const FALLBACK_TEMPLATE = `
 <div class="dslot-card" data-dslot-root data-dslot-word="{{word}}">
   <div class="dslot-head">
-    <div class="dslot-kicker">Dictionary</div>
+    <div class="dslot-head">
+    <div class="dslot-kicker-row">
+      <div class="dslot-kicker">Dictionary</div>
+      {{source_links_html}}
+    </div>
     <div class="dslot-word-line">
       <h2 class="dslot-word">{{word}}</h2>
       {{phonetic_html}}

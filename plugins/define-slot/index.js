@@ -92,7 +92,7 @@ const LOOKUP_WORD_RE = /^[A-Za-z](?:[A-Za-z'-]{0,46}[A-Za-z])?$/;
 
 const DEFAULT_SETTINGS = {
   triggerMode: "keyword",
-  maxDefinitions: 3,
+  maxDefinitions: 5,
   maxRelatedTerms: 4,
   serverUrl: DEFAULT_DICTIONARY_SERVER_URL,
   showOrigin: true,
@@ -271,11 +271,12 @@ export const slot = {
     },
     {
       key: "maxDefinitions",
-      label: "Definitions",
+      label: "Definitions to preview",
       type: "select",
-      options: ["2", "3", "5"],
-      default: "3",
-      description: "Maximum number of definitions to show.",
+      options: ["2", "3", "5", "7"],
+      default: "5",
+      description:
+        "Definitions shown before the expander. The full list is always one click away via 'Show all N definitions'.",
     },
     {
       key: "maxRelatedTerms",
@@ -1157,58 +1158,43 @@ function renderAudioButtons(word) {
 }
 
 function renderDefinitions(definitions) {
-  // Cap the card, but spread the budget across parts of speech instead of
-  // slicing the flat list. A flat slice can show three stale same-POS senses
-  // (e.g. "render" showing only plaster-noun senses) and hide the everyday verb
-  // meanings. Round-robin across POS groups in original order until the cap is
-  // filled, so the card shows a spread (noun-then-verb like a real dictionary)
-  // while still using the full budget.
+  // Flat capped preview in source (dictionary) order, then a "Show all N
+  // definitions" expander for the rest. No round-robin, no dedupe: the dataset
+  // is curated and its senses are already numbered in editorial order, so we
+  // never reorder or collapse content - the cap is just a default preview,
+  // and the expander guarantees nothing is ever hidden.
   const cap = settings.maxDefinitions;
-  const byPos = new Map();
-  for (const item of definitions) {
-    const pos = item.partOfSpeech || "";
-    if (!byPos.has(pos)) byPos.set(pos, []);
-    byPos.get(pos).push(item);
-  }
+  const total = definitions.length;
+  const preview = definitions.slice(0, cap);
 
-  const groups = [...byPos.values()];
-  const selected = [];
-  // Advance each group in turn; stop when the cap is reached.
-  const cursor = new Array(groups.length).fill(0);
-  let rounds = 0;
-  while (selected.length < cap && rounds < 50) {
-    let advanced = false;
-    for (let i = 0; i < groups.length && selected.length < cap; i++) {
-      if (cursor[i] < groups[i].length) {
-        selected.push(groups[i][cursor[i]++]);
-        advanced = true;
-      }
-    }
-    if (!advanced) break;
-    rounds++;
-  }
-
-  const rows = selected
-    .map((item, index) => {
-      const partOfSpeech = item.partOfSpeech
-        ? `<span class="dslot-pos">${esc(item.partOfSpeech)}</span>`
+  const renderItem = (item, index) => {
+    const partOfSpeech = item.partOfSpeech
+      ? `<span class="dslot-pos">${esc(item.partOfSpeech)}</span>`
+      : "";
+    const example =
+      settings.showExamples && item.example
+        ? `<div class="dslot-example">${esc(item.example)}</div>`
         : "";
-      const example =
-        settings.showExamples && item.example
-          ? `<div class="dslot-example">${esc(item.example)}</div>`
-          : "";
+    return `<li class="dslot-def">
+      <span class="dslot-def-num">${index + 1}</span>
+      <div class="dslot-def-copy">
+        <div class="dslot-def-line">${partOfSpeech}<span class="dslot-def-text">${esc(item.definition)}</span></div>
+        ${example}
+      </div>
+    </li>`;
+  };
 
-      return `<li class="dslot-def">
-        <span class="dslot-def-num">${index + 1}</span>
-        <div class="dslot-def-copy">
-          <div class="dslot-def-line">${partOfSpeech}<span class="dslot-def-text">${esc(item.definition)}</span></div>
-          ${example}
-        </div>
-      </li>`;
-    })
-    .join("");
+  const rows = preview.map(renderItem).join("");
 
-  return `<ol class="dslot-definitions">${rows}</ol>`;
+  let extra = "";
+  if (total > cap) {
+    const rest = definitions.slice(cap);
+    extra = `<details class="dslot-more-defs"><summary>Show all ${total} definitions</summary><ol class="dslot-definitions dslot-definitions-full">${rest
+      .map((item, idx) => renderItem(item, cap + idx + 1))
+      .join("")}</ol></details>`;
+  }
+
+  return `<ol class="dslot-definitions">${rows}</ol>${extra}`;
 }
 
 function renderRelated(synonyms, antonyms, intent) {

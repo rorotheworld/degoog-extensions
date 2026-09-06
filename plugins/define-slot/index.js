@@ -87,8 +87,14 @@ async function cacheSet(cache, key, value, ttlMs) {
   if (cache) await cache.set(key, value, ttlMs);
 }
 
-const WORD_CAPTURE = "([A-Za-z](?:[A-Za-z'-]{0,46}[A-Za-z])?)";
-const LOOKUP_WORD_RE = /^[A-Za-z](?:[A-Za-z'-]{0,46}[A-Za-z])?$/;
+// Latin-1 letters plus ASCII: covers accented Western European words (étranger,
+// café, über, façade) the dictionary server can answer via the Wiktionary REST
+// fallback, without needing the `u` flag on every QUERY_PATTERN. Kept deliberately
+// to Latin-1 - the card is English-first and the fallback serves foreign headwords
+// in their own script, but Cyrillic/Chinese queried as a bare word is a separate
+// concern (and usually not what an English dictionary should render).
+const WORD_CAPTURE = "([A-Za-zÀ-ÖØ-öø-ÿ](?:[A-Za-zÀ-ÖØ-öø-ÿ'-]{0,46}[A-Za-zÀ-ÖØ-öø-ÿ])?)";
+const LOOKUP_WORD_RE = /^[A-Za-zÀ-ÖØ-öø-ÿ](?:[A-Za-zÀ-ÖØ-öø-ÿ'-]{0,46}[A-Za-zÀ-ÖØ-öø-ÿ])?$/;
 
 const DEFAULT_SETTINGS = {
   triggerMode: "keyword",

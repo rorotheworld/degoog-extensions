@@ -1216,11 +1216,8 @@ function renderDefinitions(definitions) {
         ? renderExample(item.example)
         : "";
     return `<li class="dslot-def">
-      <span class="dslot-def-meta">
-        <span class="dslot-def-num">${index + 1}</span>
-      </span>
       <div class="dslot-def-copy">
-        <div class="dslot-def-line">${pos}<span class="dslot-def-text">${esc(item.definition)}</span></div>
+        <div class="dslot-def-line"><span class="dslot-def-num">${index + 1}.</span>${pos}<span class="dslot-def-text">${esc(item.definition)}</span></div>
         ${example}
       </div>
     </li>`;

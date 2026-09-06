@@ -163,9 +163,7 @@
 }
 
 .dslot-def {
-  display: grid;
-  grid-template-columns: 1.6rem minmax(0, 1fr);
-  gap: 6px 10px;
+  display: block;
   min-width: 0;
   padding: 7px 9px;
   border: 1px solid var(--border-light, var(--border, #dadce0));
@@ -216,19 +214,10 @@
   list-style: none;
 }
 
-/* Meta column: just the sense number, top-aligned so a tall definition row
-   doesn't stretch it. The part-of-speech chip sits inline before the text
-   (Option A). */
-.dslot-def-meta {
-  display: block;
-  min-width: 0;
-}
-
 .dslot-def-num {
   color: var(--text-secondary, #5f6368);
-  font-size: 0.8rem;
-  line-height: 1.55;
-  text-align: right;
+  font-size: 0.86rem;
+  margin-right: 5px;
   font-variant-numeric: tabular-nums;
 }
 
@@ -682,10 +671,6 @@
 
   .dslot-related {
     grid-template-columns: 1fr;
-  }
-
-  .dslot-def {
-    grid-template-columns: 1.4rem minmax(0, 1fr);
   }
 }
 

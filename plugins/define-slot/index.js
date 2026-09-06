@@ -1,6 +1,7 @@
 
 let template = "";
 let pluginFetch = (...args) => fetch(...args);
+let pluginRouteBase = "";
 let dictionaryCache = null;
 
 // Local dictionary-server endpoint (see rorotheworld/dictionary-server). Defaults
@@ -317,6 +318,7 @@ export const slot = {
 
   init(ctx) {
     template = ctx?.template || FALLBACK_TEMPLATE;
+    setPluginRouteBase(ctx);
     if (typeof ctx?.fetch === "function") {
       pluginFetch = (...args) => ctx.fetch(...args);
     }
@@ -425,9 +427,59 @@ export const slot = {
 };
 
 export const slotPlugin = slot;
-// No plugin routes: pronunciation audio is served by the dictionary server
-// ({serverUrl}/audio/{word}), not proxied through degoog.
-export const routes = [];
+
+// Proxy route: the browser cannot resolve the dictionary server's Docker-internal
+// hostname (dictionary:3000), so audio must come through degoog's own origin.
+// This route forwards /audio requests to the dictionary server and streams the
+// result. The heavy lifting (Cambridge/Wiktionary/TTS chain, caching, egress) is
+// all in the dictionary server; this is a dumb pass-through.
+export const routes = [
+  {
+    method: "get",
+    path: "audio",
+    handler: async (request) => {
+      const url = new URL(request.url);
+      const word = decodeURIComponent(url.searchParams.get("word") || "").toLowerCase();
+      const accent = url.searchParams.get("accent") === "us" ? "us" : "uk";
+      if (!word) {
+        return new Response("Missing word", { status: 400 });
+      }
+      try {
+        const res = await fetchWithTimeout(
+          pluginFetch,
+          `${audioRoot()}/audio/${encodeURIComponent(word)}?accent=${accent}`,
+          { headers: { Accept: "audio/*,*/*;q=0.1" } },
+        );
+        if (!res.ok) {
+          return new Response("No audio available", { status: res.status });
+        }
+        const content = await res.arrayBuffer();
+        return new Response(content, {
+          status: 200,
+          headers: {
+            "Content-Type": res.headers.get("content-type") || "audio/mpeg",
+            "Cache-Control": "public, max-age=86400",
+          },
+        });
+      } catch {
+        return new Response("Audio unavailable", { status: 502 });
+      }
+    },
+  },
+];
+
+function setPluginRouteBase(ctx) {
+  if (ctx?.apiBase) {
+    pluginRouteBase = ctx.apiBase;
+  } else if (typeof ctx?.routeUrl === "function") {
+    pluginRouteBase = ctx.routeUrl();
+  } else {
+    const dir = typeof ctx?.dir === "string" ? ctx.dir : "";
+    const folder = dir.replace(/[\\/]+$/, "").split(/[\\/]/).filter(Boolean).pop();
+    const prefix = ["", "api", "plugin"].join("/");
+    pluginRouteBase = folder ? `${prefix}/${encodeURIComponent(folder)}` : `${prefix}/define-slot`;
+  }
+}
 
 export default slot;
 
@@ -1089,7 +1141,9 @@ function audioRoot() {
 }
 
 function audioUrl(word, accent) {
-  return `${audioRoot()}/audio/${encodeURIComponent(word)}?accent=${accent}`;
+  // Route through degoog's own origin so the browser can reach it from any
+  // device (desktop or phone); the plugin route proxies to the dictionary server.
+  return `${pluginRouteBase}/audio?word=${encodeURIComponent(word)}&accent=${accent}`;
 }
 
 function renderAudioButtons(word) {

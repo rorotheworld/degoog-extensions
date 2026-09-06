@@ -1388,11 +1388,11 @@ function renderEtymologyTree(raw) {
 
 function renderOrigin(origin) {
   const { prose, full } = etymologyText(origin);
+  const tree = renderEtymologyTree(origin);
   const body =
     settings.originFormat === "full"
-      ? `<p>${esc(full)}</p>`
+      ? tree || `<p>${esc(full)}</p>`
       : (() => {
-          const tree = renderEtymologyTree(origin);
           let expander = "";
           if (tree) {
             expander = tree;

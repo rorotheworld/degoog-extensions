@@ -1,4 +1,4 @@
-
+﻿
 let template = "";
 let pluginFetch = (...args) => fetch(...args);
 let pluginRouteBase = "";
@@ -272,7 +272,7 @@ export const slot = {
       type: "url",
       default: DEFAULT_DICTIONARY_SERVER_URL,
       description:
-        "Base URL of the dictionary-server. The default assumes it runs as a " +
+        "Base URL of dic-ser. The default assumes it runs as a " +
         "Docker service named 'dictionary'; point this at your instance if not.",
     },
     {
@@ -601,7 +601,7 @@ async function lookupDictionary(word, context) {
 }
 
 function normalizeDictionaryData(data, requestedWord) {
-  // Local dictionary-server shape:
+  // Local dic-ser response shape:
   // { word, entries: [ { pos, senses:[{glosses, examples, tags, synonyms,
   //   antonyms}], sounds:[{ipa, ogg_url, mp3_url}], forms, translations,
   //   etymology, related:{derived, related, synonyms, antonyms} } ] }

@@ -1335,55 +1335,92 @@ function sentenceSummary(text, cap = 220) {
 }
 
 // Parse the line-broken Wiktionary etymology-tree dump into labeled nodes and
-// render it as an indented tree in the "More" expander. Depth is inferred from
-// the reconstruction markers (a "Proto-*" line opens a new level; a bare
-// "Language word" line stays at the current level). Borrow/derive markers and
-// the "repeats ancestor" glyph are preserved as small edge tags. This is a
-// best-effort reading of the sequence, not a faithful graph - it makes the
-// lineage legible without claiming perfect structure.
+// render it as an indented lineage tree in the "More" expander. Depth is
+// inferred from the reconstruction markers (a "Proto-*" line opens a new
+// level; a plain "Language word" line stays at the current level). Borrow/
+// derive markers and the "repeats ancestor" glyph are kept as small edge tags.
+// The CSS draws a connector rail under each node that has descendants, so the
+// result reads as a branching diagram, not just an outline. Best-effort
+// reading of the sequence, not a faithful graph - it makes the lineage
+// legible without claiming perfect structure.
 function renderEtymologyTree(raw) {
   if (!/^etymology tree/i.test(String(raw || ""))) return null;
-  const lines = String(raw)
+  const rawLines = String(raw)
     .split(/\n+/)
     .map((l) => l.trim())
     .filter(Boolean)
     .slice(1); // drop the "Etymology tree" header
 
   // Depth model: each new "Proto-*" line opens one level deeper; a plain
-  // "Language word" node sits at the current level; a "▲" marker returns to the
-  // top level (previous ancestor). Borrow/derive edge tags are appended to the
-  // node, not new levels.
+  // "Language word" node sits at the current level; a "▲" marker returns to
+  // the top level (previous ancestor). Borrow/derive edge tags ride on the
+  // node, they do not open new levels.
+  const nodes = [];
   let depth = 0;
   let sawProto = false;
-  const out = [];
-  for (let line of lines) {
-    if (line === "▲") {
-      depth = 0;
-      out.push(
-        `<li class="dslot-et-tree" data-depth="${depth}"><span class="dslot-et-node">↻</span><span class="dslot-et-edge"> (same ancestor)</span></li>`,
-      );
+  for (let rawLine of rawLines) {
+    if (rawLine === "▲") {
+      nodes.push({ kind: "same", depth: 0 });
       continue;
     }
     let edge = "";
-    const edgeMatch = line.match(/(bor\.|der\.|nom\.|redup\.)$/);
+    const edgeMatch = rawLine.match(/(bor\.|der\.|nom\.|redup\.)$/);
     if (edgeMatch) {
       edge = edgeMatch[1];
-      line = line.slice(0, -edgeMatch[1].length).trim();
+      rawLine = rawLine.slice(0, -edgeMatch[1].length).trim();
     }
-    const isProto = /^proto-/i.test(line) && line.includes("*");
+    const isProto = /^proto-/i.test(rawLine) && rawLine.includes("*");
     if (isProto) {
       if (sawProto) depth++;
       sawProto = true;
     } else {
       sawProto = false;
     }
-    const label = line.includes("*") ? line : line.replace(/\s+\(.+\)$/, "");
-    out.push(
-      `<li class="dslot-et-tree" data-depth="${depth}"><span class="dslot-et-node">${esc(label)}</span>${edge ? ` <span class="dslot-et-edge">${esc(edge)}</span>` : ""}</li>`,
-    );
-    if (isProto && line.includes("()")) depth--;
+    const label = rawLine.includes("*")
+      ? rawLine
+      : rawLine.replace(/\s+\(.+\)$/, "");
+    nodes.push({ kind: "node", depth, label: esc(label), edge });
+    if (isProto && rawLine.includes("()")) depth--;
   }
-  return `<details class="dslot-et-wrap"><summary>Etymology tree</summary><ul class="dslot-et-list">${out.join("")}</ul></details>`;
+
+  // Walk the depth sequence and build real nested <ul>/<li> structure. A node
+  // is a child of the most recent shallower node; equal depth means a sibling.
+  // Building actual nesting (instead of padding on a flat list) is what lets
+  // the CSS draw branch connectors that land correctly.
+  const root = { children: [] };
+  const stack = [root];
+  for (const node of nodes) {
+    const li = { kind: node.kind, edge: node.edge, label: node.label, children: [] };
+    if (node.kind === "same") {
+      // "▲" re-enters a previous ancestor; attach it at the top level as a note.
+      stack[0].children.push(li);
+      continue;
+    }
+    while (stack.length > 1 && stack[stack.length - 1].depth >= node.depth) {
+      stack.pop();
+    }
+    const parent = stack[stack.length - 1];
+    parent.children.push(li);
+    li.depth = node.depth;
+    stack.push(li);
+  }
+
+  // Render one tree candidate as nested lists.
+  const renderList = (items) =>
+    `<ul class="dslot-et-list">${items.map(renderNode).join("")}</ul>`;
+
+  function renderNode(node) {
+    if (node.kind === "same") {
+      return `<li class="dslot-et-tree dslot-et-same">↻ <span class="dslot-et-edge">(same ancestor)</span></li>`;
+    }
+    const kids = node.children.length ? renderList(node.children) : "";
+    const branchCls = node.children.length ? " dslot-et-branch" : "";
+    return `<li class="dslot-et-tree${branchCls}" data-depth="${node.depth}"><span class="dslot-et-node">${node.label}</span>${node.edge ? ` <span class="dslot-et-edge">${esc(node.edge)}</span>` : ""}${kids}</li>`;
+  }
+
+  return `<details class="dslot-et-wrap"><summary>Etymology tree</summary>${renderList(
+    root.children,
+  )}</details>`;
 }
 
 function renderOrigin(origin) {

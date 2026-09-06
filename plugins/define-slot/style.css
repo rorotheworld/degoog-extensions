@@ -118,7 +118,7 @@
 
 .dslot-definitions {
   display: grid;
-  gap: 2px;
+  gap: 5px;
   margin: 0;
   padding: 0;
   list-style: none;
@@ -127,13 +127,16 @@
 .dslot-def {
   display: grid;
   grid-template-columns: 1.2rem minmax(0, 1fr);
-  gap: 6px;
+  gap: 6px 8px;
   min-width: 0;
-  padding: 2px 6px;
-  border-radius: 6px;
+  padding: 7px 9px;
+  border: 1px solid var(--border-light, var(--border, #dadce0));
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--bg-light, Canvas) 55%, transparent);
 }
 
 .dslot-def:hover {
+  border-color: color-mix(in srgb, var(--dslot-accent, #4285f4) 45%, var(--border, #dadce0));
   background: color-mix(in srgb, var(--bg-light, Canvas) 75%, transparent);
 }
 
@@ -238,7 +241,7 @@
   max-width: 100%;
   padding: 2px 7px;
   border: 1px solid var(--border-light, var(--border, #dadce0));
-  border-radius: 999px;
+  border-radius: 10px;
   background: var(--bg, Canvas);
   color: var(--text-primary, inherit);
   font: inherit;
@@ -254,8 +257,8 @@
   min-height: 24px;
   max-width: 100%;
   padding: 2px 8px;
-  border: 1px dashed var(--dslot-accent, #4285f4);
-  border-radius: 999px;
+  border: 1px solid var(--border-light, var(--border, #dadce0));
+  border-radius: 10px;
   background: color-mix(in srgb, var(--dslot-accent, #4285f4) 5%, transparent);
   color: var(--dslot-accent, #4285f4);
   font: inherit;
@@ -329,7 +332,7 @@
 .dslot-rating {
   flex: 0 0 auto;
   padding: 1px 5px;
-  border-radius: 999px;
+  border-radius: 8px;
   background: color-mix(in srgb, var(--success, #34a853) 13%, transparent);
   color: var(--success, #137333);
   font-size: 0.72rem;
@@ -401,7 +404,11 @@
   line-height: 1.5;
 }
 
-/* Etymology lineage tree (shown in the "More" expander for tree-shaped words). */
+/* Etymology lineage tree (shown in the "More" expander for tree-shaped words).
+   The nodes are genuine nested <ul>/<li> lists, so the CSS can draw branch
+   connectors: each nested list hangs a vertical rail just inside its parent's
+   text column and every child has a short horizontal stub back to that rail.
+   The result reads as a branching forest, not an indented outline. */
 .dslot-et-wrap {
   margin-top: 6px;
 }
@@ -417,25 +424,54 @@
 }
 
 .dslot-et-list {
-  margin: 6px 0 0;
-  padding: 0 0 0 4px;
+  margin: 4px 0 0;
+  padding: 0;
   list-style: none;
 }
 
+/* Root-level nodes: no rail, they are the trunks of the diagram. */
+.dslot-et-list > .dslot-et-tree {
+  padding-left: 0;
+}
+
+/* Every nested list hangs a vertical rail from its parent subtree. Position
+   it a bit left of the child text so it lines up with the parent's text edge
+   (the classic tree indentation guide). */
+.dslot-et-list .dslot-et-list {
+  position: relative;
+  margin-top: 1px;
+  padding-left: 1.25em;
+}
+
+.dslot-et-list .dslot-et-list::before {
+  content: "";
+  position: absolute;
+  left: 0.32em;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: var(--border-light, var(--border, #dadce0));
+}
+
 .dslot-et-tree {
-  padding-left: calc(var(--et-depth, 0) * 14px);
+  position: relative;
   margin: 1px 0;
+  padding: 1px 0;
   font-size: 0.88rem;
-  line-height: 1.4;
+  line-height: 1.5;
   color: var(--text-primary, inherit);
 }
 
-.dslot-et-tree[data-depth="0"] { --et-depth: 0; }
-.dslot-et-tree[data-depth="1"] { --et-depth: 1; }
-.dslot-et-tree[data-depth="2"] { --et-depth: 2; }
-.dslot-et-tree[data-depth="3"] { --et-depth: 3; }
-.dslot-et-tree[data-depth="4"] { --et-depth: 4; }
-.dslot-et-tree[data-depth="5"] { --et-depth: 5; }
+/* Horizontal stub: the child's text connects back to its parent's rail. */
+.dslot-et-list .dslot-et-list > .dslot-et-tree::before {
+  content: "";
+  position: absolute;
+  left: -0.5em;
+  top: 1.05em;
+  width: 0.85em;
+  height: 1px;
+  background: var(--border-light, var(--border, #dadce0));
+}
 
 .dslot-et-node {
   color: var(--text-primary, inherit);
@@ -444,6 +480,17 @@
 .dslot-et-edge {
   color: var(--text-secondary, #5f6368);
   font-size: 0.78rem;
+  font-style: italic;
+}
+
+/* The "same ancestor" note (▲) is not a branch: it returns to a previously
+   seen node. Show it as a short quiet line pinned to the left, no stub of its
+   own. */
+.dslot-et-tree.dslot-et-same {
+  margin-top: 3px;
+  padding-left: 0;
+  color: var(--text-secondary, #5f6368);
+  font-size: 0.82rem;
   font-style: italic;
 }
 

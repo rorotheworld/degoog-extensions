@@ -454,16 +454,11 @@ export const routes = [
       const url = new URL(request.url);
       const word = decodeURIComponent(url.searchParams.get("word") || "").toLowerCase();
       const accent = url.searchParams.get("accent") === "us" ? "us" : "uk";
-      const lang = url.searchParams.get("lang") || "";
       if (!word) {
         return new Response("Missing word", { status: 400 });
       }
       try {
-        // Forward lang when present (foreign pronunciation) else accent.
-        const upstream =
-          lang
-            ? `${audioRoot()}/audio/${encodeURIComponent(word)}?lang=${encodeURIComponent(lang)}`
-            : `${audioRoot()}/audio/${encodeURIComponent(word)}?accent=${accent}`;
+        const upstream = `${audioRoot()}/audio/${encodeURIComponent(word)}?accent=${accent}`;
         const res = await fetchWithTimeout(
           pluginFetch,
           upstream,
@@ -615,8 +610,6 @@ function normalizeDictionaryData(data, requestedWord) {
 
   for (const entry of entries) {
     const partOfSpeech = String(entry?.pos || "").trim();
-    const lang = String(entry?.lang_code || entry?.lang || "en").trim() || "en";
-    const langName = String(entry?.language || "").trim() || lang;
     for (const sense of asArray(entry?.senses)) {
       collectTerms(synonyms, sense.synonyms);
       collectTerms(antonyms, sense.antonyms);
@@ -625,8 +618,6 @@ function normalizeDictionaryData(data, requestedWord) {
         if (!gloss) continue;
         definitions.push({
           partOfSpeech,
-          lang,
-          langName,
           definition: String(gloss).trim(),
           example: firstString(
             asArray(sense?.examples).map((ex) =>
@@ -644,14 +635,9 @@ function normalizeDictionaryData(data, requestedWord) {
   const sounds = entries.flatMap((entry) => asArray(entry?.sounds));
   const ipa = sounds.find((s) => s?.ipa)?.ipa || "";
   const origin = firstString(entries.map((entry) => entry?.etymology));
-  const langs = Array.isArray(data?.langs) && data.langs.length
-    ? data.langs.map(String)
-    : [...new Set(definitions.map((d) => d.lang))];
 
   return {
     word,
-    langs,
-    hasEnglish: langs.includes("en"),
     phonetic: String(ipa || "").trim(),
     origin,
     definitions,
@@ -1134,8 +1120,8 @@ function renderEntry(entry, intent) {
     phonetic_html: entry.phonetic
       ? `<span class="dslot-phonetic">${esc(entry.phonetic)}</span>`
       : "",
-    audio_button: renderAudioButtons(entry),
-    body_html: renderDefinitions(entry.definitions, word),
+    audio_button: renderAudioButtons(word),
+    body_html: renderDefinitions(entry.definitions),
     related_html: renderRelated(entry.synonyms, entry.antonyms, intent),
     origin_html:
       entry.origin && settings.showOrigin ? renderOrigin(entry.origin) : "",
@@ -1168,69 +1154,28 @@ function audioRoot() {
   return base.replace(/\/api\/en\/?$/, "").replace(/\/+$/, "");
 }
 
-const PLUGIN_LANG_NAMES = {
-  en: "English", fr: "French", es: "Spanish", de: "German", it: "Italian",
-  pt: "Portuguese", nl: "Dutch", la: "Latin", el: "Greek", ru: "Russian",
-  pl: "Polish", ca: "Catalan", ast: "Asturian", da: "Danish", sv: "Swedish",
-  gl: "Galician", nrm: "Norman",
-};
-
-// Human name for a language code, for the Pronounce button label and fallback
-// when the server did not supply language names for the langs list.
-function wordLangName(code) {
-  return PLUGIN_LANG_NAMES[code] || code;
-}
-
 function audioUrl(word, accent) {
   // Route through degoog's own origin so the browser can reach it from any
   // device (desktop or phone); the plugin route proxies to the dictionary server.
   return `${pluginRouteBase}/audio?word=${encodeURIComponent(word)}&accent=${accent}`;
 }
 
-function foreignAudioUrl(word, lang) {
-  // Non-English pronunciation: the dictionary server resolves a real clip from
-  // the word's own language Wiktionary. lang is required; accent is not used.
-  return `${pluginRouteBase}/audio?word=${encodeURIComponent(word)}&lang=${encodeURIComponent(lang)}`;
+function renderAudioButtons(word) {
+  const uk = audioUrl(word, "uk");
+  const us = audioUrl(word, "us");
+  const base = "dslot-audio dslot-audio-btn";
+  return `<span class="dslot-audio-group">
+    <button class="${base}" type="button" data-dslot-audio="${escAttr(uk)}" aria-label="${t("playPronunciationFor")} (UK) ${escAttr(word)}" aria-pressed="false" title="${t("playPronunciation")} (UK)">UK</button>
+    <button class="${base}" type="button" data-dslot-audio="${escAttr(us)}" aria-label="${t("playPronunciationFor")} (US) ${escAttr(word)}" aria-pressed="false" title="${t("playPronunciation")} (US)">US</button>
+  </span>`;
 }
 
-function renderAudioButtons(entry) {
-  const word = entry.word;
-  const buttons = [];
-
-  // English (or any UK/US-capable) words get the accent pair. Non-English-only
-  // results (foreign headword served by the Wiktionary REST fallback) get a
-  // single Pronounce button for the word's language; UK/US would be a lie.
-  if (entry.hasEnglish !== false) {
-    buttons.push(
-      `<button class="${"dslot-audio dslot-audio-btn"}" type="button" data-dslot-audio="${escAttr(audioUrl(word, "uk"))}" aria-label="${t("playPronunciationFor")} (UK) ${escAttr(word)}" aria-pressed="false" title="${t("playPronunciation")} (UK)">UK</button>`,
-      `<button class="${"dslot-audio dslot-audio-btn"}" type="button" data-dslot-audio="${escAttr(audioUrl(word, "us"))}" aria-label="${t("playPronunciationFor")} (US) ${escAttr(word)}" aria-pressed="false" title="${t("playPronunciation")} (US)">US</button>`,
-    );
-  }
-
-  // Foreign pronunciations ride beside the English pair when present, or alone.
-  const foreignLangs = (entry.langs || []).filter((l) => l && l !== "en");
-  if (foreignLangs.length) {
-    const lang = foreignLangs[0];
-    const langLabel = (wordLangName(lang) || lang).toUpperCase();
-    buttons.push(
-      `<button class="${"dslot-audio dslot-audio-btn dslot-audio-foreign"}" type="button" data-dslot-audio="${escAttr(foreignAudioUrl(word, lang))}" aria-label="${t("playPronunciationFor")} (${langLabel}) ${escAttr(word)}" aria-pressed="false" title="${t("playPronunciation")} (${langLabel})">${esc(langLabel)}</button>`,
-    );
-  }
-
-  if (!buttons.length) return "";
-  return `<span class="dslot-audio-group">${buttons.join("")}</span>`;
-}
-
-function renderDefinitions(definitions, word) {
+function renderDefinitions(definitions) {
   // Flat capped preview in source (dictionary) order, then a "Show all N
   // definitions" expander for the rest. No round-robin, no dedupe: the dataset
   // is curated and its senses are already numbered in editorial order, so we
   // never reorder or collapse content - the cap is just a default preview,
   // and the expander guarantees nothing is ever hidden.
-  //
-  // Non-English senses are tagged with their language, and the tag is a link to
-  // the word's page on that language's Wiktionary ({code}.wiktionary.org/wiki/{word}).
-  // English senses stay untagged - the card is English-first.
   const cap = settings.maxDefinitions;
   const total = definitions.length;
 
@@ -1242,14 +1187,10 @@ function renderDefinitions(definitions, word) {
       settings.showExamples && item.example
         ? `<div class="dslot-example">${esc(item.example)}</div>`
         : "";
-    const langLabel =
-      item.lang && item.lang !== "en"
-        ? `<a class="dslot-lang" href="https://${wiktionaryLangHost(item.lang)}/wiki/${encodeURIComponent(word)}" target="_blank" rel="noopener noreferrer">${esc(item.langName || item.lang)}</a> `
-        : "";
     return `<li class="dslot-def">
       <span class="dslot-def-num">${index + 1}</span>
       <div class="dslot-def-copy">
-        <div class="dslot-def-line">${langLabel}${partOfSpeech}<span class="dslot-def-text">${esc(item.definition)}</span></div>
+        <div class="dslot-def-line">${partOfSpeech}<span class="dslot-def-text">${esc(item.definition)}</span></div>
         ${example}
       </div>
     </li>`;
@@ -1269,14 +1210,6 @@ function renderDefinitions(definitions, word) {
   }
 
   return `<ol class="dslot-definitions">${rows}</ol>${extra}`;
-}
-
-// Wiktionary language projects live at {code}.wiktionary.org. The generic
-// "other" bucket (misc homographs) has no language project; point it at the
-// English entry instead, which carries the disambiguated sections.
-function wiktionaryLangHost(lang) {
-  if (lang === "other") return "en.wiktionary.org";
-  return `${lang}.wiktionary.org`;
 }
 
 function renderRelated(synonyms, antonyms, intent) {

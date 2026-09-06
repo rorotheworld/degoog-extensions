@@ -99,13 +99,6 @@
   font-weight: 600;
 }
 
-/* Foreign-language Pronounce button (non-English word): same shape as the UK/US
-   pair, but with the language label instead of an accent marker. */
-.dslot-audio-foreign {
-  border-color: color-mix(in srgb, var(--dslot-accent, #4285f4) 45%, var(--border-light, var(--border, #dadce0)));
-  min-width: 44px;
-}
-
 .dslot-audio-unavailable {
   font-size: 0.68rem;
   font-style: italic;
@@ -208,23 +201,6 @@
   font-size: 0.88rem;
   font-style: italic;
   margin-right: 6px;
-}
-
-/* Language tag on non-English definitions: a quiet label that is also the link
-   to that language's Wiktionary page for the word. */
-.dslot-lang {
-  color: var(--text-secondary, #5f6368);
-  font-size: 0.72rem;
-  font-weight: 600;
-  letter-spacing: 0.02em;
-  text-transform: uppercase;
-  text-decoration: none;
-  margin-right: 5px;
-}
-
-.dslot-lang:hover {
-  color: var(--dslot-accent, #4285f4);
-  text-decoration: underline;
 }
 
 .dslot-example {

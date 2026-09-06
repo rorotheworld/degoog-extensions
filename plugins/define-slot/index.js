@@ -1260,8 +1260,11 @@ function renderDefinitions(definitions, word) {
   let extra = "";
   if (total > cap) {
     const rest = definitions.slice(cap);
+    // `cap + idx` is the item's true zero-based position in the full list, so
+    // renderItem's `index + 1` numbers the first hidden item `cap + 1` (not
+    // `cap + 2` - passing `cap + idx + 1` here double-counts and skips a number).
     extra = `<details class="dslot-more-defs"><summary>Show all ${total} definitions</summary><ol class="dslot-definitions dslot-definitions-full">${rest
-      .map((item, idx) => renderItem(item, cap + idx + 1))
+      .map((item, idx) => renderItem(item, cap + idx))
       .join("")}</ol></details>`;
   }
 

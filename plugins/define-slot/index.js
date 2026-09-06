@@ -1149,10 +1149,12 @@ function renderSourceLinks(word) {
   // Middle dot (·) separators keep the three links scannable without adding
   // chrome; the separator sits outside the anchors so only the word is a link.
   const sep = `<span class="dslot-srclinks-sep">·</span>`;
+  // Small outbound-arrow icon after each label signals the link leaves degoog.
+  const extIcon = `<svg class="dslot-ext-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 17 17 7"/><path d="M9 7h8v8"/></svg>`;
   return `<span class="dslot-srclinks">
-    <a href="https://en.wiktionary.org/wiki/${encodeURIComponent(wiktionaryTitle)}" target="_blank" rel="noopener noreferrer">Wiktionary</a>${sep}
-    <a href="https://dictionary.cambridge.org/dictionary/english/${encodeURIComponent(cambridgeSlug)}" target="_blank" rel="noopener noreferrer">Cambridge</a>${sep}
-    <a href="https://www.powerthesaurus.org/${encodeURIComponent(ptSlug)}" target="_blank" rel="noopener noreferrer">Power Thesaurus</a>
+    <a href="https://en.wiktionary.org/wiki/${encodeURIComponent(wiktionaryTitle)}" target="_blank" rel="noopener noreferrer">Wiktionary${extIcon}</a>${sep}
+    <a href="https://dictionary.cambridge.org/dictionary/english/${encodeURIComponent(cambridgeSlug)}" target="_blank" rel="noopener noreferrer">Cambridge${extIcon}</a>${sep}
+    <a href="https://www.powerthesaurus.org/${encodeURIComponent(ptSlug)}" target="_blank" rel="noopener noreferrer">Power Thesaurus${extIcon}</a>
   </span>`;
 }
 

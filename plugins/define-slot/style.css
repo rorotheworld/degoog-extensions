@@ -76,6 +76,10 @@
   color: var(--text-secondary, #5f6368);
   text-decoration: none;
   white-space: nowrap;
+  /* Align the outbound icon with the label text. */
+  display: inline-flex;
+  align-items: center;
+  gap: 1px;
 }
 
 .dslot-srclinks a:hover,
@@ -87,6 +91,18 @@
 .dslot-srclinks-sep {
   color: var(--text-secondary, #5f6368);
   opacity: 0.6;
+}
+
+/* Outbound-link indicator on the source hotlinks. */
+.dslot-ext-icon {
+  width: 9px;
+  height: 9px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 2;
+  opacity: 0.7;
 }
 
 .dslot-audio {

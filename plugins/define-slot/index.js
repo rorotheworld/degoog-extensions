@@ -4,11 +4,11 @@ let pluginFetch = (...args) => fetch(...args);
 let pluginRouteBase = "";
 let dictionaryCache = null;
 
-// Local dictionary-server endpoint (see rorotheworld/dictionary-server). Defaults
+// Local dic-ser endpoint (see rorotheworld/dic-ser). Defaults
 // to the container name on the docker_proxy network; override in plugin settings
 // if the deployment copies it elsewhere. Replaces the flaky https://api.
 // dictionaryapi.dev endpoint the original plugin hardcoded.
-const DEFAULT_DICTIONARY_SERVER_URL = "http://dictionary:3000/api/en";
+const DEFAULT_DICTIONARY_SERVER_URL = "http://dic-ser:3000/api/en";
 const POWER_THESAURUS_API_URL = "https://api.powerthesaurus.org";
 const POWER_THESAURUS_WEB_URL = "https://www.powerthesaurus.org";
 const FETCH_TIMEOUT_MS = 8000;
@@ -444,9 +444,9 @@ export const slot = {
 
 export const slotPlugin = slot;
 
-// Proxy route: the browser cannot resolve the dictionary server's Docker-internal
-// hostname (dictionary:3000), so audio must come through degoog's own origin.
-// This route forwards /audio requests to the dictionary server and streams the
+// Proxy route: the browser cannot resolve the dic-ser's Docker-internal
+// hostname (dic-ser:3000), so audio must come through degoog's own origin.
+// This route forwards /audio requests to dic-ser and streams the
 // result. The heavy lifting (Cambridge/Wiktionary/TTS chain, caching, egress) is
 // all in the dictionary server; this is a dumb pass-through.
 export const routes = [

@@ -10,7 +10,7 @@ Self-hosted [degoog](https://github.com/degoog-org/degoog) extensions for the op
 | --- | --- | --- | --- |
 | [linkding](plugins/linkding-slot) | Plugin (slot) | Panel of matching bookmarks alongside normal search results | 0.24.0 |
 | [linkding Engine](engines/linkding-engine) | Engine | Dedicated linkding results tab and the `!linkding` bang | 0.21.0 |
-| [Dictionary](plugins/define-slot) | Plugin (slot) | Definitions, pronunciation, synonyms/antonyms and etymology from a self-hosted dictionary-server (Wiktionary via kaikki.org), with PowerThesaurus enrichment. Adapted from [SoPat712/degoog-toolkit](https://github.com/SoPat712/degoog-toolkit). Requires the [dictionary-server](https://github.com/rorotheworld/dictionary-server) container. | 0.24.0 |
+| [Dictionary](plugins/define-slot) | Plugin (slot) | Definitions, pronunciation, synonyms/antonyms and etymology from a self-hosted dic-ser (Wiktionary via kaikki.org), with PowerThesaurus enrichment. Adapted from [SoPat712/degoog-toolkit](https://github.com/SoPat712/degoog-toolkit). Requires the [dic-ser](https://github.com/rorotheworld/dic-ser) container. | 0.24.0 |
 
 Each extension is independent. Install any of them alone or all together.
 

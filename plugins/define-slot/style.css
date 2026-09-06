@@ -401,6 +401,52 @@
   line-height: 1.5;
 }
 
+/* Etymology lineage tree (shown in the "More" expander for tree-shaped words). */
+.dslot-et-wrap {
+  margin-top: 6px;
+}
+
+.dslot-et-wrap > summary {
+  cursor: pointer;
+  color: var(--text-link, var(--dslot-accent, #4285f4));
+  list-style: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  user-select: none;
+}
+
+.dslot-et-list {
+  margin: 6px 0 0;
+  padding: 0 0 0 4px;
+  list-style: none;
+}
+
+.dslot-et-tree {
+  padding-left: calc(var(--et-depth, 0) * 14px);
+  margin: 1px 0;
+  font-size: 0.88rem;
+  line-height: 1.4;
+  color: var(--text-primary, inherit);
+}
+
+.dslot-et-tree[data-depth="0"] { --et-depth: 0; }
+.dslot-et-tree[data-depth="1"] { --et-depth: 1; }
+.dslot-et-tree[data-depth="2"] { --et-depth: 2; }
+.dslot-et-tree[data-depth="3"] { --et-depth: 3; }
+.dslot-et-tree[data-depth="4"] { --et-depth: 4; }
+.dslot-et-tree[data-depth="5"] { --et-depth: 5; }
+
+.dslot-et-node {
+  color: var(--text-primary, inherit);
+}
+
+.dslot-et-edge {
+  color: var(--text-secondary, #5f6368);
+  font-size: 0.78rem;
+  font-style: italic;
+}
+
 /* "More" expander for split summary/full etymology. Collapsed summary reads as
    one line; opening reveals the full clean text. */
 .dslot-origin-more {

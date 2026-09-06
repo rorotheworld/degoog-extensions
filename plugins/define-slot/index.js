@@ -1334,15 +1334,77 @@ function sentenceSummary(text, cap = 220) {
   return `${head.slice(0, spaceIdx > 40 ? spaceIdx : cap).trim()} …`;
 }
 
+// Parse the line-broken Wiktionary etymology-tree dump into labeled nodes and
+// render it as an indented tree in the "More" expander. Depth is inferred from
+// the reconstruction markers (a "Proto-*" line opens a new level; a bare
+// "Language word" line stays at the current level). Borrow/derive markers and
+// the "repeats ancestor" glyph are preserved as small edge tags. This is a
+// best-effort reading of the sequence, not a faithful graph - it makes the
+// lineage legible without claiming perfect structure.
+function renderEtymologyTree(raw) {
+  if (!/^etymology tree/i.test(String(raw || ""))) return null;
+  const lines = String(raw)
+    .split(/\n+/)
+    .map((l) => l.trim())
+    .filter(Boolean)
+    .slice(1); // drop the "Etymology tree" header
+
+  // Depth model: each new "Proto-*" line opens one level deeper; a plain
+  // "Language word" node sits at the current level; a "▲" marker returns to the
+  // top level (previous ancestor). Borrow/derive edge tags are appended to the
+  // node, not new levels.
+  let depth = 0;
+  let sawProto = false;
+  const out = [];
+  for (let line of lines) {
+    if (line === "▲") {
+      depth = 0;
+      out.push(
+        `<li class="dslot-et-tree" data-depth="${depth}"><span class="dslot-et-node">↻</span><span class="dslot-et-edge"> (same ancestor)</span></li>`,
+      );
+      continue;
+    }
+    let edge = "";
+    const edgeMatch = line.match(/(bor\.|der\.|nom\.|redup\.)$/);
+    if (edgeMatch) {
+      edge = edgeMatch[1];
+      line = line.slice(0, -edgeMatch[1].length).trim();
+    }
+    const isProto = /^proto-/i.test(line) && line.includes("*");
+    if (isProto) {
+      if (sawProto) depth++;
+      sawProto = true;
+    } else {
+      sawProto = false;
+    }
+    const label = line.includes("*") ? line : line.replace(/\s+\(.+\)$/, "");
+    out.push(
+      `<li class="dslot-et-tree" data-depth="${depth}"><span class="dslot-et-node">${esc(label)}</span>${edge ? ` <span class="dslot-et-edge">${esc(edge)}</span>` : ""}</li>`,
+    );
+    if (isProto && line.includes("()")) depth--;
+  }
+  return `<details class="dslot-et-wrap"><summary>Etymology tree</summary><ul class="dslot-et-list">${out.join("")}</ul></details>`;
+}
+
 function renderOrigin(origin) {
   const { prose, full } = etymologyText(origin);
   const body =
     settings.originFormat === "full"
       ? `<p>${esc(full)}</p>`
-      : prose.length > 320
-        ? `<p>${esc(sentenceSummary(prose, 300))}</p>
-    <details class="dslot-origin-more"><summary>More</summary><p>${esc(prose)}</p></details>`
-        : `<p>${esc(prose)}</p>`;
+      : (() => {
+          const tree = renderEtymologyTree(origin);
+          let expander = "";
+          if (tree) {
+            expander = tree;
+          } else if (prose.length > 320) {
+            expander = `<p>${esc(prose)}</p>`;
+          }
+          const summary = prose.length > 320 ? sentenceSummary(prose, 300) : prose;
+          const more = expander
+            ? `<details class="dslot-origin-more"><summary>More</summary>${expander}</details>`
+            : "";
+          return `<p>${esc(summary)}</p>${more}`;
+        })();
 
   return `<div class="dslot-origin">
     <div class="dslot-label">${esc(t("origin"))}</div>

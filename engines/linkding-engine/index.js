@@ -1,7 +1,8 @@
 // linkding Engine for Degoog
 //
 // Searches your self-hosted linkding bookmarks. Results appear in a dedicated
-// "linkding" tab and via the !linkding bang shortcut.
+// "linkding" tab and via the !linkding bang shortcut, with an optional shorter
+// !ld alias selectable in Settings > Engines > linkding ("Bang shortcut").
 //
 // NOTE: this engine is configured in Settings > Engines > linkding. Degoog keeps
 //       engines and plugins in separate registries, so the URL and API token here
@@ -32,6 +33,7 @@ export const type = ["web", "linkding"];
 let _url = "";
 let _token = "";
 let _limit = 20;
+let _bang = "linkding";
 
 function _isConfigured() {
   return Boolean(_url && _token);
@@ -42,9 +44,24 @@ function _isConfigured() {
 export default class LinkdingEngine {
   isClientExposed = false;
   name = "linkding";
-  bangShortcut = "linkding";
+
+  // A getter rather than a plain field: Degoog reads engine.bangShortcut on
+  // every query (via getEngineShortcuts -> getSearchEngineMap), so returning
+  // the configured value makes the !ld toggle take effect without a reload.
+  get bangShortcut() {
+    return _bang;
+  }
 
   settingsSchema = [
+    {
+      key: "bang",
+      label: "Bang shortcut",
+      type: "select",
+      options: ["linkding", "ld"],
+      optionLabels: ["!linkding", "!ld"],
+      default: "linkding",
+      description: "Which bang fires this engine. Only one is active at a time.",
+    },
     {
       key: "url",
       label: "linkding Instance URL",
@@ -82,6 +99,11 @@ export default class LinkdingEngine {
 
     const parsed = parseInt(settings?.limit ?? "20", 10);
     _limit = Math.max(1, Math.min(50, Number.isNaN(parsed) ? 20 : parsed));
+
+    // Bang select: "linkding" (default) or the short "ld" alias. Unknown
+    // values fall back to the default so a future option removal can't brick
+    // the bang lookup.
+    _bang = settings?.bang === "ld" ? "ld" : "linkding";
   }
 
   async executeSearch(query, page = 1, _timeFilter, context) {

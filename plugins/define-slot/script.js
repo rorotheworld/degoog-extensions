@@ -49,9 +49,24 @@
       resetAudioButton();
     };
 
+    const failed = () => {
+      reset();
+      // Fail-clean: the dictionary server returns 404 JSON when no audio source
+      // exists at all. Show that on the button instead of a silent dead click.
+      button.classList.add("dslot-audio-unavailable");
+      const label = button.title || button.textContent || "";
+      button.textContent = "no audio";
+      button.setAttribute("title", label);
+      setTimeout(() => {
+        button.classList.remove("dslot-audio-unavailable");
+        button.textContent = label;
+        button.removeAttribute("title");
+      }, 2500);
+    };
+
     audio.addEventListener("ended", reset, { once: true });
-    audio.addEventListener("error", reset, { once: true });
-    audio.play().catch(reset);
+    audio.addEventListener("error", failed, { once: true });
+    audio.play().catch(failed);
   }
 
   function handleLookupClick(event) {

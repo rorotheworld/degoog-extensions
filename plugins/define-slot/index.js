@@ -1,7 +1,6 @@
 
 let template = "";
 let pluginFetch = (...args) => fetch(...args);
-let pluginRouteBase = "";
 let dictionaryCache = null;
 
 // Local dictionary-server endpoint (see rorotheworld/dictionary-server). Defaults
@@ -12,15 +11,6 @@ const DEFAULT_DICTIONARY_SERVER_URL = "http://dictionary:3000/api/en";
 const POWER_THESAURUS_API_URL = "https://api.powerthesaurus.org";
 const POWER_THESAURUS_WEB_URL = "https://www.powerthesaurus.org";
 const FETCH_TIMEOUT_MS = 8000;
-const AUDIO_HOSTS = new Set([
-  "api.dictionaryapi.dev",
-  "ssl.gstatic.com",
-  "www.gstatic.com",
-  // kaikki.org entries point pronunciation audio at Wikimedia Commons
-  // (ogg_url/mp3_url fields).
-  "commons.wikimedia.org",
-  "upload.wikimedia.org",
-]);
 
 const POWER_THESAURUS_SEARCH_QUERY = `query SEARCH_QUERY($query: String!) {
   search(query: $query) {
@@ -327,7 +317,6 @@ export const slot = {
 
   init(ctx) {
     template = ctx?.template || FALLBACK_TEMPLATE;
-    setPluginRouteBase(ctx);
     if (typeof ctx?.fetch === "function") {
       pluginFetch = (...args) => ctx.fetch(...args);
     }
@@ -418,7 +407,6 @@ export const slot = {
     const relatedOnlyEntry = {
       word: parsed.word,
       phonetic: "",
-      audioUrl: "",
       origin: "",
       definitions: [],
       synonyms: relatedTerms.synonyms,
@@ -437,71 +425,11 @@ export const slot = {
 };
 
 export const slotPlugin = slot;
-export const routes = [
-  {
-    method: "get",
-    path: "audio",
-    handler: async (request) => {
-      const url = new URL(request.url);
-      const source = normalizeAudioUrl(decodeAudioUrl(url.searchParams.get("src")));
-
-      if (!source) {
-        return new Response("Invalid audio URL", {
-          status: 400,
-          headers: { "Cache-Control": "no-store" },
-        });
-      }
-
-      try {
-        const response = await fetchWithTimeout(pluginFetch, source, {
-          headers: {
-            Accept: "audio/*,*/*;q=0.1",
-            // Wikimedia's robot policy rejects requests without a User-Agent
-            // (HTTP 403, "Please set a user-agent"). The proxy fetch path
-            // otherwise sends no UA.
-            "User-Agent": "degoog-dictionary/1.0 (self-hosted dictionary card)",
-          },
-        });
-
-        if (!response.ok) {
-          return new Response("Audio unavailable", {
-            status: 502,
-            headers: { "Cache-Control": "no-store" },
-          });
-        }
-
-        return new Response(response.body, {
-          status: 200,
-          headers: {
-            "Cache-Control": "public, max-age=86400",
-            "Content-Type":
-              response.headers.get("content-type") || "audio/mpeg",
-          },
-        });
-      } catch {
-        return new Response("Audio unavailable", {
-          status: 502,
-          headers: { "Cache-Control": "no-store" },
-        });
-      }
-    },
-  },
-];
+// No plugin routes: pronunciation audio is served by the dictionary server
+// ({serverUrl}/audio/{word}), not proxied through degoog.
+export const routes = [];
 
 export default slot;
-
-function setPluginRouteBase(ctx) {
-  if (ctx?.apiBase) {
-    pluginRouteBase = ctx.apiBase;
-  } else if (typeof ctx?.routeUrl === "function") {
-    pluginRouteBase = ctx.routeUrl();
-  } else {
-    const dir = typeof ctx?.dir === "string" ? ctx.dir : "";
-    const folder = dir.replace(/[\\/]+$/, "").split(/[\\/]/).filter(Boolean).pop();
-    const prefix = ["", "api", "plugin"].join("/");
-    pluginRouteBase = folder ? `${prefix}/${encodeURIComponent(folder)}` : `${prefix}/define-slot`;
-  }
-}
 
 function parseDictionaryQuery(query) {
   const q = normalizeQuery(query);
@@ -640,15 +568,11 @@ function normalizeDictionaryData(data, requestedWord) {
 
   const sounds = entries.flatMap((entry) => asArray(entry?.sounds));
   const ipa = sounds.find((s) => s?.ipa)?.ipa || "";
-  const audioUrl = firstValidAudioUrl(
-    sounds.map((s) => s?.mp3_url || s?.ogg_url || s?.audio || ""),
-  );
   const origin = firstString(entries.map((entry) => entry?.etymology));
 
   return {
     word,
     phonetic: String(ipa || "").trim(),
-    audioUrl,
     origin,
     definitions,
     synonyms: [...synonyms.values()].map((wd) => makeSimpleRelatedTerm(wd, "synonym")),
@@ -1108,37 +1032,6 @@ function collectTerms(target, terms) {
   }
 }
 
-function firstValidAudioUrl(phonetics) {
-  for (const item of phonetics) {
-    const url = normalizeAudioUrl(typeof item === "string" ? item : item?.audio);
-    if (url) return url;
-  }
-  return "";
-}
-
-function normalizeAudioUrl(value) {
-  let raw = String(value || "").trim();
-  if (!raw) return "";
-  if (raw.startsWith("//")) raw = `https:${raw}`;
-  if (raw.startsWith("/")) raw = `https://api.dictionaryapi.dev${raw}`;
-
-  try {
-    const url = new URL(raw);
-    if (url.protocol !== "https:" && url.protocol !== "http:") return "";
-    if (!AUDIO_HOSTS.has(url.hostname)) return "";
-
-    const path = url.pathname.toLowerCase();
-    const isKnownAudioPath =
-      path.includes("/media/pronunciations/") ||
-      path.includes("/dictionary/static/sounds/") ||
-      /\.(?:mp3|wav|ogg)$/.test(path);
-
-    return isKnownAudioPath ? url.toString() : "";
-  } catch {
-    return "";
-  }
-}
-
 async function fetchWithTimeout(fetcher, url, init = {}) {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
@@ -1150,16 +1043,18 @@ async function fetchWithTimeout(fetcher, url, init = {}) {
 }
 
 function renderEntry(entry, intent) {
-  const audioRoute = entry.audioUrl
-    ? `${pluginRouteBase}/audio?src=${encodeURIComponent(encodeAudioUrl(entry.audioUrl))}`
-    : "";
+  // Pronunciation audio is resolved by the dictionary server (Cambridge ->
+  // Wiktionary -> TTS -> fail-clean) at {serverUrl}/audio/{word}?accent=uk|us.
+  // The browser only talks to the dictionary server; it never contacts the
+  // audio sources directly. UK and US buttons are rendered separately.
+  const word = entry.word;
 
   return applyTemplate({
-    word: esc(entry.word),
+    word: esc(word),
     phonetic_html: entry.phonetic
       ? `<span class="dslot-phonetic">${esc(entry.phonetic)}</span>`
       : "",
-    audio_button: audioRoute ? renderAudioButton(audioRoute, entry.word) : "",
+    audio_button: renderAudioButtons(word),
     body_html: renderDefinitions(entry.definitions),
     related_html: renderRelated(entry.synonyms, entry.antonyms, intent),
     origin_html:
@@ -1186,14 +1081,25 @@ function applyTemplate(replacements) {
   return html;
 }
 
-function renderAudioButton(audioRoute, word) {
-  return `<button class="dslot-audio" type="button" data-dslot-audio="${escAttr(audioRoute)}" aria-label="${t("playPronunciationFor")} ${escAttr(word)}" aria-pressed="false" title="${t("playPronunciation")}">
-    <svg class="dslot-audio-icon" viewBox="0 0 20 20" aria-hidden="true">
-      <path d="M3 8v4h3l4 3V5L6 8H3z"></path>
-      <path d="M13 7.2a4 4 0 0 1 0 5.6"></path>
-      <path d="M15.2 5a7 7 0 0 1 0 10"></path>
-    </svg>
-  </button>`;
+function audioRoot() {
+  // serverUrl points at the API subtree (.../api/en); the /audio route lives
+  // at the server root, so strip a trailing /api/en before building audio URLs.
+  const base = settings.serverUrl || DEFAULT_DICTIONARY_SERVER_URL;
+  return base.replace(/\/api\/en\/?$/, "").replace(/\/+$/, "");
+}
+
+function audioUrl(word, accent) {
+  return `${audioRoot()}/audio/${encodeURIComponent(word)}?accent=${accent}`;
+}
+
+function renderAudioButtons(word) {
+  const uk = audioUrl(word, "uk");
+  const us = audioUrl(word, "us");
+  const base = "dslot-audio dslot-audio-btn";
+  return `<span class="dslot-audio-group">
+    <button class="${base}" type="button" data-dslot-audio="${escAttr(uk)}" aria-label="${t("playPronunciationFor")} (UK) ${escAttr(word)}" aria-pressed="false" title="${t("playPronunciation")} (UK)">UK</button>
+    <button class="${base}" type="button" data-dslot-audio="${escAttr(us)}" aria-label="${t("playPronunciationFor")} (US) ${escAttr(word)}" aria-pressed="false" title="${t("playPronunciation")} (US)">US</button>
+  </span>`;
 }
 
 function renderDefinitions(definitions) {
@@ -1372,25 +1278,6 @@ function renderOrigin(origin) {
     <div class="dslot-label">${esc(t("origin"))}</div>
     ${body}
   </div>`;
-}
-
-function encodeAudioUrl(url) {
-  return Buffer.from(String(url), "utf8")
-    .toString("base64")
-    .replace(/\+/g, "-")
-    .replace(/\//g, "_")
-    .replace(/=+$/g, "");
-}
-
-function decodeAudioUrl(value) {
-  const raw = String(value || "");
-  if (!raw) return "";
-  const padded = raw.replace(/-/g, "+").replace(/_/g, "/");
-  try {
-    return Buffer.from(padded, "base64").toString("utf8");
-  } catch {
-    return "";
-  }
 }
 
 function esc(value) {

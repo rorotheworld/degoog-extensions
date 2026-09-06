@@ -1192,9 +1192,10 @@ function renderAudioButtons(word) {
   const uk = audioUrl(word, "uk");
   const us = audioUrl(word, "us");
   const base = "dslot-audio dslot-audio-btn";
+  const icon = `<svg class="dslot-audio-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9v6h4l5 4V5L8 9H4z"/><path d="M16 8a4.5 4.5 0 0 1 0 8"/><path d="M18.5 5.5a8 8 0 0 1 0 13"/></svg>`;
   return `<span class="dslot-audio-group">
-    <button class="${base}" type="button" data-dslot-audio="${escAttr(uk)}" aria-label="${t("playPronunciationFor")} (UK) ${escAttr(word)}" aria-pressed="false" title="${t("playPronunciation")} (UK)">UK</button>
-    <button class="${base}" type="button" data-dslot-audio="${escAttr(us)}" aria-label="${t("playPronunciationFor")} (US) ${escAttr(word)}" aria-pressed="false" title="${t("playPronunciation")} (US)">US</button>
+    <button class="${base}" type="button" data-dslot-audio="${escAttr(uk)}" aria-label="${t("playPronunciationFor")} (UK) ${escAttr(word)}" aria-pressed="false" title="${t("playPronunciation")} (UK)">${icon}UK</button>
+    <button class="${base}" type="button" data-dslot-audio="${escAttr(us)}" aria-label="${t("playPronunciationFor")} (US) ${escAttr(word)}" aria-pressed="false" title="${t("playPronunciation")} (US)">${icon}US</button>
   </span>`;
 }
 
@@ -1485,7 +1486,7 @@ function renderEtymologyTree(raw) {
 function renderOrigin(origin) {
   const { prose, full } = etymologyText(origin);
   const tree = renderEtymologyTree(origin);
-  const originKicker = `<span class="dslot-origin-kicker">${esc(t("origin"))}:</span> `;
+  const originKicker = `<span class="dslot-origin-kicker">${esc(t("origin"))}</span> `;
 
   // Tree-only origin (no prose sentence extracted): show the collapsible tree
   // directly under an inline "Origin:" lead-in, so no separate label row

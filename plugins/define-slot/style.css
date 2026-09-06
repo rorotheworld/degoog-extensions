@@ -171,12 +171,14 @@
   padding: 7px 9px;
   border: 1px solid var(--border-light, var(--border, #dadce0));
   border-radius: 10px;
-  background: color-mix(in srgb, var(--bg-light, Canvas) 55%, transparent);
+  /* Slightly darker than the card: blend the base card colour (--bg) heavily
+     with the lighter container tint, all derived - no hardcoded tones. */
+  background: color-mix(in srgb, var(--bg, Canvas) 82%, var(--bg-light, Canvas));
 }
 
 .dslot-def:hover {
   border-color: color-mix(in srgb, var(--dslot-accent, #4285f4) 45%, var(--border, #dadce0));
-  background: color-mix(in srgb, var(--bg-light, Canvas) 75%, transparent);
+  background: color-mix(in srgb, var(--bg, Canvas) 72%, var(--bg-light, Canvas));
 }
 
 /* "Show all N definitions" expander under the capped preview. */
@@ -485,7 +487,9 @@
   padding: 12px;
   border: 1px solid var(--border-light, var(--border, #dadce0));
   border-radius: 16px;
-  background: color-mix(in srgb, var(--bg-light, Canvas) 75%, transparent);
+  /* Same derived darker tone as the definition rows: --bg blend, not a
+     hardcoded colour. */
+  background: color-mix(in srgb, var(--bg, Canvas) 82%, var(--bg-light, Canvas));
 }
 
 .dslot-origin p {

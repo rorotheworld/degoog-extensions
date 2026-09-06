@@ -1157,8 +1157,38 @@ function renderAudioButtons(word) {
 }
 
 function renderDefinitions(definitions) {
-  const visibleDefinitions = definitions.slice(0, settings.maxDefinitions);
-  const rows = visibleDefinitions
+  // Cap the card, but spread the budget across parts of speech instead of
+  // slicing the flat list. A flat slice can show three stale same-POS senses
+  // (e.g. "render" showing only plaster-noun senses) and hide the everyday verb
+  // meanings. Round-robin across POS groups in original order until the cap is
+  // filled, so the card shows a spread (noun-then-verb like a real dictionary)
+  // while still using the full budget.
+  const cap = settings.maxDefinitions;
+  const byPos = new Map();
+  for (const item of definitions) {
+    const pos = item.partOfSpeech || "";
+    if (!byPos.has(pos)) byPos.set(pos, []);
+    byPos.get(pos).push(item);
+  }
+
+  const groups = [...byPos.values()];
+  const selected = [];
+  // Advance each group in turn; stop when the cap is reached.
+  const cursor = new Array(groups.length).fill(0);
+  let rounds = 0;
+  while (selected.length < cap && rounds < 50) {
+    let advanced = false;
+    for (let i = 0; i < groups.length && selected.length < cap; i++) {
+      if (cursor[i] < groups[i].length) {
+        selected.push(groups[i][cursor[i]++]);
+        advanced = true;
+      }
+    }
+    if (!advanced) break;
+    rounds++;
+  }
+
+  const rows = selected
     .map((item, index) => {
       const partOfSpeech = item.partOfSpeech
         ? `<span class="dslot-pos">${esc(item.partOfSpeech)}</span>`

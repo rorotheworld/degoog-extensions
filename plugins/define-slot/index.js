@@ -1126,11 +1126,28 @@ function renderEntry(entry, intent) {
     audio_button: entry.definitions.length
       ? renderAudioButtons(word)
       : "",
+    source_links_html: entry.definitions.length ? renderSourceLinks(word) : "",
     body_html: renderDefinitions(entry.definitions),
     related_html: renderRelated(entry.synonyms, entry.antonyms, intent),
     origin_html:
       entry.origin && settings.showOrigin ? renderOrigin(entry.origin) : "",
   });
+}
+
+// Tiny per-word hotlinks to the external sources the card draws from, filling
+// the deadspace at the right end of the word line. Only shown when the word
+// actually resolved (has definitions) - a miss has nothing useful to link to.
+function renderSourceLinks(word) {
+  const w = String(word || "").trim();
+  if (!w) return "";
+  const wiktionaryTitle = w.replace(/\s+/g, "_");
+  const cambridgeSlug = w.replace(/\s+/g, "-");
+  const ptSlug = slugifyPowerTerm(w);
+  return `<span class="dslot-srclinks">
+    <a href="https://en.wiktionary.org/wiki/${encodeURIComponent(wiktionaryTitle)}" target="_blank" rel="noopener noreferrer">Wiktionary</a>
+    <a href="https://dictionary.cambridge.org/dictionary/english/${encodeURIComponent(cambridgeSlug)}" target="_blank" rel="noopener noreferrer">Cambridge</a>
+    <a href="https://www.powerthesaurus.org/${encodeURIComponent(ptSlug)}" target="_blank" rel="noopener noreferrer">Power Thesaurus</a>
+  </span>`;
 }
 
 function renderEmpty(word) {

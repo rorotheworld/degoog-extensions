@@ -51,6 +51,31 @@
   line-height: 1.35;
 }
 
+/* Per-word source hotlinks (Wiktionary / Cambridge / Power Thesaurus), pushed
+   to the right end of the word line to fill its deadspace. Quiet secondary
+   text that brightens on hover, matching the kicker/source language. */
+.dslot-srclinks {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+  padding-left: 10px;
+  font-size: 0.7rem;
+  line-height: 1;
+}
+
+.dslot-srclinks a {
+  color: var(--text-secondary, #5f6368);
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.dslot-srclinks a:hover,
+.dslot-srclinks a:focus-visible {
+  color: var(--dslot-accent, #4285f4);
+  text-decoration: underline;
+}
+
 .dslot-audio {
   display: inline-grid;
   place-items: center;

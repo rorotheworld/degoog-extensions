@@ -254,7 +254,6 @@ const FALLBACK_TEMPLATE = `
   {{body_html}}
   {{related_html}}
   {{origin_html}}
-  <div class="dslot-source">Data: <a href="https://kaikki.org" target="_blank" rel="noopener">Wiktionary via kaikki.org</a> · Related: <a href="https://www.powerthesaurus.org/" target="_blank" rel="noopener">Power Thesaurus</a></div>
 </div>`;
 
 export const slot = {

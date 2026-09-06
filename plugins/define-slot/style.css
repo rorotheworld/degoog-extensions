@@ -573,25 +573,6 @@
   font-weight: 600;
 }
 
-.dslot-source {
-  color: var(--text-secondary, #5f6368);
-  font-size: 0.78rem;
-  line-height: 1.35;
-}
-
-.dslot-source a {
-  display: inline-flex;
-  align-items: center;
-  min-height: 24px;
-  color: var(--text-link, var(--dslot-accent, #4285f4));
-  text-decoration: none;
-}
-
-.dslot-source a:hover,
-.dslot-source a:focus-visible {
-  text-decoration: underline;
-}
-
 @container (max-width: 420px) {
   .dslot-word {
     font-size: 1.36rem;

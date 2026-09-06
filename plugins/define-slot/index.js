@@ -1120,7 +1120,12 @@ function renderEntry(entry, intent) {
     phonetic_html: entry.phonetic
       ? `<span class="dslot-phonetic">${esc(entry.phonetic)}</span>`
       : "",
-    audio_button: renderAudioButtons(word),
+    // Audio only makes sense when the word exists in the dictionary (has
+    // definitions). A related-only card (word not found, PowerThesaurus match)
+    // must not show UK/US buttons that 404 on click.
+    audio_button: entry.definitions.length
+      ? renderAudioButtons(word)
+      : "",
     body_html: renderDefinitions(entry.definitions),
     related_html: renderRelated(entry.synonyms, entry.antonyms, intent),
     origin_html:

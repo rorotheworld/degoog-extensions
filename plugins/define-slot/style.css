@@ -118,7 +118,7 @@
 
 .dslot-definitions {
   display: grid;
-  gap: 8px;
+  gap: 2px;
   margin: 0;
   padding: 0;
   list-style: none;
@@ -126,12 +126,15 @@
 
 .dslot-def {
   display: grid;
-  grid-template-columns: 1.35rem minmax(0, 1fr);
-  gap: 8px;
+  grid-template-columns: 1.2rem minmax(0, 1fr);
+  gap: 6px;
   min-width: 0;
-  padding: 8px 10px;
-  border-radius: 14px;
-  background: color-mix(in srgb, var(--bg-light, Canvas) 80%, transparent);
+  padding: 2px 6px;
+  border-radius: 6px;
+}
+
+.dslot-def:hover {
+  background: color-mix(in srgb, var(--bg-light, Canvas) 75%, transparent);
 }
 
 /* "Show all N definitions" expander under the capped preview. */
@@ -166,15 +169,15 @@
 
 .dslot-more-defs .dslot-definitions-full {
   display: grid;
-  gap: 6px;
-  margin-top: 8px;
+  gap: 2px;
+  margin-top: 4px;
   padding: 0;
   list-style: none;
 }
 
 .dslot-def-num {
   color: var(--text-secondary, #5f6368);
-  font-size: 0.92rem;
+  font-size: 0.8rem;
   line-height: 1.55;
   text-align: right;
   font-variant-numeric: tabular-nums;
@@ -198,9 +201,9 @@
 }
 
 .dslot-example {
-  margin-top: 2px;
+  margin-top: 0;
   color: var(--text-secondary, #5f6368);
-  font-size: 0.9rem;
+  font-size: 0.88rem;
   font-style: italic;
   line-height: 1.45;
 }

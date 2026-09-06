@@ -1218,10 +1218,9 @@ function renderDefinitions(definitions) {
     return `<li class="dslot-def">
       <span class="dslot-def-meta">
         <span class="dslot-def-num">${index + 1}</span>
-        ${pos}
       </span>
       <div class="dslot-def-copy">
-        <div class="dslot-def-line"><span class="dslot-def-text">${esc(item.definition)}</span></div>
+        <div class="dslot-def-line">${pos}<span class="dslot-def-text">${esc(item.definition)}</span></div>
         ${example}
       </div>
     </li>`;
@@ -1244,15 +1243,20 @@ function renderDefinitions(definitions) {
 }
 
 // An example sentence can run far longer than the definitions it illustrates.
-// Short ones render inline; long ones are clamped to ~3 lines with a "more"
+// Short ones render inline; long ones clamp the text (~3 lines) with a "more"
 // button that removes the clamp on click (see script.js dslot-example-more).
+// The button is a SIBLING of the clamped text, not inside it - clamping uses
+// overflow:hidden, which would clip the button away.
 const LONG_EXAMPLE_CHARS = 180;
 
 function renderExample(example) {
   const text = String(example || "").trim();
   if (!text) return "";
   const long = text.length > LONG_EXAMPLE_CHARS;
-  return `<div class="dslot-example${long ? " dslot-example--clamped" : ""}">${esc(text)}${long ? `<button class="dslot-example-more" type="button" aria-expanded="false">more</button>` : ""}</div>`;
+  const inner = long
+    ? `<span class="dslot-example-text dslot-example-text--clamped">${esc(text)}</span><button class="dslot-example-more" type="button" aria-expanded="false">more</button>`
+    : `<span class="dslot-example-text">${esc(text)}</span>`;
+  return `<div class="dslot-example">${inner}</div>`;
 }
 
 function renderRelated(synonyms, antonyms, intent) {

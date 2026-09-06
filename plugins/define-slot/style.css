@@ -164,7 +164,7 @@
 
 .dslot-def {
   display: grid;
-  grid-template-columns: 2.5rem minmax(0, 1fr);
+  grid-template-columns: 1.6rem minmax(0, 1fr);
   gap: 6px 10px;
   min-width: 0;
   padding: 7px 9px;
@@ -216,14 +216,11 @@
   list-style: none;
 }
 
-/* Meta column: the number and part-of-speech pill stack under it, keeping the
-   definition copy on a clean left-aligned line. Start-aligned so neither the
-   number nor the pill stretches to fill a tall definition row. */
+/* Meta column: just the sense number, top-aligned so a tall definition row
+   doesn't stretch it. The part-of-speech chip sits inline before the text
+   (Option A). */
 .dslot-def-meta {
-  display: grid;
-  justify-items: center;
-  align-content: start;
-  gap: 4px;
+  display: block;
   min-width: 0;
 }
 
@@ -245,14 +242,13 @@
   line-height: 1.55;
 }
 
-/* Part-of-speech chip: quiet bordered pill, upper-case, sits in the meta
-   column under the number. Reads as a label, not prose bleeding into the
-   definition. */
+/* Part-of-speech chip (Option A): quiet bordered pill, upper-case, sitting
+   inline before the definition text. Reads as a label, not prose bleeding in. */
 .dslot-pos {
   display: inline-flex;
   align-items: center;
-  align-self: start;
-  min-height: 16px;
+  vertical-align: baseline;
+  margin-right: 6px;
   padding: 0 5px;
   border: 1px solid var(--border-light, var(--border, #dadce0));
   border-radius: 6px;
@@ -260,32 +256,37 @@
   color: var(--text-secondary, #5f6368);
   font-size: 0.66rem;
   font-weight: 600;
-  line-height: 1;
+  line-height: 1.3;
   text-transform: uppercase;
   letter-spacing: 0.02em;
 }
 
 /* Example sentence: quoted block with a left rail so it never reads as more
-   definition text. Not italic (legibility). */
+   definition text. The text style lives on the inner .dslot-example-text. */
 .dslot-example {
+  display: block;
   margin-top: 4px;
   padding-left: 9px;
   border-left: 2px solid var(--border, #dadce0);
+}
+
+.dslot-example-text {
   color: var(--text-secondary, #5f6368);
   font-size: 0.88rem;
   line-height: 1.5;
 }
 
-/* Long examples clamp to ~3 lines with a "more" button; clicking removes the
-   clamp (script.js). */
-.dslot-example--clamped {
+/* Long examples clamp the text to ~3 lines. The clamp lives on this inner
+   span (NOT the outer .dslot-example) so the "more" button stays a visible
+   sibling - overflow:hidden on the outer box would clip it away. */
+.dslot-example-text--clamped {
   display: -webkit-box;
   -webkit-line-clamp: 3;
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
 
-.dslot-example--clamped.dslot-example--open {
+.dslot-example-text--clamped.dslot-example-text--open {
   display: block;
   -webkit-line-clamp: unset;
   overflow: visible;
@@ -542,6 +543,20 @@
   user-select: none;
 }
 
+.dslot-et-wrap > summary::before {
+  content: "▸";
+  display: inline-block;
+  transition: transform 0.12s ease;
+}
+
+.dslot-et-wrap[open] > summary::before {
+  transform: rotate(90deg);
+}
+
+.dslot-et-wrap > summary::-webkit-details-marker {
+  display: none;
+}
+
 .dslot-et-list {
   margin: 4px 0 0;
   padding: 0;
@@ -670,7 +685,7 @@
   }
 
   .dslot-def {
-    grid-template-columns: 2.1rem minmax(0, 1fr);
+    grid-template-columns: 1.4rem minmax(0, 1fr);
   }
 }
 

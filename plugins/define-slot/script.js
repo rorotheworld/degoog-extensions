@@ -238,11 +238,13 @@
 
     event.preventDefault();
 
-    // Remove the clamp and the button itself; the example then reads full-length.
-    const example = button.closest(".dslot-example");
-    if (!example) return;
-    example.classList.add("dslot-example--open");
-    example.classList.remove("dslot-example--clamped");
+    // Remove the clamp from the inner text span and the button itself; the
+    // example then reads full-length.
+    const text = button.previousElementSibling;
+    if (text && text.classList.contains("dslot-example-text")) {
+      text.classList.add("dslot-example-text--open");
+      text.classList.remove("dslot-example-text--clamped");
+    }
     button.remove();
   }
 

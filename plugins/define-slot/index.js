@@ -1147,9 +1147,12 @@ function renderSourceLinks(word) {
   const wiktionaryTitle = w.replace(/\s+/g, "_");
   const cambridgeSlug = w.replace(/\s+/g, "-");
   const ptSlug = slugifyPowerTerm(w);
+  // Middle dot (·) separators keep the three links scannable without adding
+  // chrome; the separator is outside the anchors so only the word is a link.
+  const sep = " · ";
   return `<span class="dslot-srclinks">
-    <a href="https://en.wiktionary.org/wiki/${encodeURIComponent(wiktionaryTitle)}" target="_blank" rel="noopener noreferrer">Wiktionary</a>
-    <a href="https://dictionary.cambridge.org/dictionary/english/${encodeURIComponent(cambridgeSlug)}" target="_blank" rel="noopener noreferrer">Cambridge</a>
+    <a href="https://en.wiktionary.org/wiki/${encodeURIComponent(wiktionaryTitle)}" target="_blank" rel="noopener noreferrer">Wiktionary</a>${sep}
+    <a href="https://dictionary.cambridge.org/dictionary/english/${encodeURIComponent(cambridgeSlug)}" target="_blank" rel="noopener noreferrer">Cambridge</a>${sep}
     <a href="https://www.powerthesaurus.org/${encodeURIComponent(ptSlug)}" target="_blank" rel="noopener noreferrer">Power Thesaurus</a>
   </span>`;
 }

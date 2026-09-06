@@ -232,9 +232,24 @@
     showMoreModal(kind, word, termsJson);
   }
 
+  function handleExampleMoreClick(event) {
+    const button = closestElement(event.target, ".dslot-example-more");
+    if (!button) return;
+
+    event.preventDefault();
+
+    // Remove the clamp and the button itself; the example then reads full-length.
+    const example = button.closest(".dslot-example");
+    if (!example) return;
+    example.classList.add("dslot-example--open");
+    example.classList.remove("dslot-example--clamped");
+    button.remove();
+  }
+
   document.addEventListener("click", function (event) {
     handleAudioClick(event);
     handleLookupClick(event);
     handleMoreClick(event);
+    handleExampleMoreClick(event);
   });
 })();

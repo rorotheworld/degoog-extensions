@@ -65,9 +65,10 @@
 .dslot-srclinks {
   display: inline-flex;
   align-items: center;
-  gap: 2px;
+  gap: 6px;
   margin-left: auto;
-  font-size: 0.7rem;
+  font-size: 0.72rem;
+  font-weight: 600;
   line-height: 1;
 }
 
@@ -81,6 +82,11 @@
 .dslot-srclinks a:focus-visible {
   color: var(--dslot-accent, #4285f4);
   text-decoration: underline;
+}
+
+.dslot-srclinks-sep {
+  color: var(--text-secondary, #5f6368);
+  opacity: 0.6;
 }
 
 .dslot-audio {
@@ -158,8 +164,8 @@
 
 .dslot-def {
   display: grid;
-  grid-template-columns: 1.2rem minmax(0, 1fr);
-  gap: 6px 8px;
+  grid-template-columns: 2.5rem minmax(0, 1fr);
+  gap: 6px 10px;
   min-width: 0;
   padding: 7px 9px;
   border: 1px solid var(--border-light, var(--border, #dadce0));
@@ -210,6 +216,15 @@
   list-style: none;
 }
 
+/* Meta column: the number and part-of-speech pill stack under it, keeping the
+   definition copy on a clean left-aligned line. */
+.dslot-def-meta {
+  display: grid;
+  gap: 4px;
+  justify-items: center;
+  min-width: 0;
+}
+
 .dslot-def-num {
   color: var(--text-secondary, #5f6368);
   font-size: 0.8rem;
@@ -228,19 +243,67 @@
   line-height: 1.55;
 }
 
+/* Part-of-speech chip: quiet bordered pill, upper-case, sits in the meta
+   column under the number. Reads as a label, not prose bleeding into the
+   definition. */
 .dslot-pos {
-  color: var(--dslot-accent, #4285f4);
-  font-size: 0.88rem;
-  font-style: italic;
-  margin-right: 6px;
+  display: inline-flex;
+  align-items: center;
+  min-height: 16px;
+  padding: 0 5px;
+  border: 1px solid var(--border-light, var(--border, #dadce0));
+  border-radius: 6px;
+  background: var(--bg, Canvas);
+  color: var(--text-secondary, #5f6368);
+  font-size: 0.66rem;
+  font-weight: 600;
+  line-height: 1;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
 }
 
+/* Example sentence: quoted block with a left rail so it never reads as more
+   definition text. Not italic (legibility). */
 .dslot-example {
-  margin-top: 0;
+  margin-top: 4px;
+  padding-left: 9px;
+  border-left: 2px solid var(--border, #dadce0);
   color: var(--text-secondary, #5f6368);
   font-size: 0.88rem;
-  font-style: italic;
-  line-height: 1.45;
+  line-height: 1.5;
+}
+
+/* Long examples clamp to ~3 lines with a "more" button; clicking removes the
+   clamp (script.js). */
+.dslot-example--clamped {
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.dslot-example--clamped.dslot-example--open {
+  display: block;
+  -webkit-line-clamp: unset;
+  overflow: visible;
+}
+
+.dslot-example-more {
+  display: inline;
+  margin-left: 6px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--text-link, var(--dslot-accent, #4285f4));
+  font: inherit;
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.dslot-example-more:hover,
+.dslot-example-more:focus-visible {
+  text-decoration: underline;
 }
 
 .dslot-related {
@@ -436,6 +499,27 @@
   line-height: 1.5;
 }
 
+/* Inline "Origin:" lead-in replaces the separate label row, so the section
+   takes no more vertical space than its content needs. */
+.dslot-origin-kicker {
+  color: var(--text-secondary, #5f6368);
+  font-size: 0.78rem;
+  font-weight: 650;
+  letter-spacing: 0;
+  line-height: 1.25;
+  text-transform: uppercase;
+}
+
+/* Tree-only origin: the collapsible tree sits directly after the inline
+   lead-in, no label row above it. */
+.dslot-origin--tree .dslot-et-wrap {
+  margin-top: 2px;
+}
+
+.dslot-origin--tree .dslot-et-wrap > summary {
+  display: inline;
+}
+
 /* Etymology lineage tree (shown in the "More" expander for tree-shaped words).
    The nodes are genuine nested <ul>/<li> lists, so the CSS can draw branch
    connectors: each nested list hangs a vertical rail just inside its parent's
@@ -583,7 +667,7 @@
   }
 
   .dslot-def {
-    grid-template-columns: 1.1rem minmax(0, 1fr);
+    grid-template-columns: 2.1rem minmax(0, 1fr);
   }
 }
 

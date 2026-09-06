@@ -1147,8 +1147,8 @@ function renderSourceLinks(word) {
   const cambridgeSlug = w.replace(/\s+/g, "-");
   const ptSlug = slugifyPowerTerm(w);
   // Middle dot (·) separators keep the three links scannable without adding
-  // chrome; the separator is outside the anchors so only the word is a link.
-  const sep = " · ";
+  // chrome; the separator sits outside the anchors so only the word is a link.
+  const sep = `<span class="dslot-srclinks-sep">·</span>`;
   return `<span class="dslot-srclinks">
     <a href="https://en.wiktionary.org/wiki/${encodeURIComponent(wiktionaryTitle)}" target="_blank" rel="noopener noreferrer">Wiktionary</a>${sep}
     <a href="https://dictionary.cambridge.org/dictionary/english/${encodeURIComponent(cambridgeSlug)}" target="_blank" rel="noopener noreferrer">Cambridge</a>${sep}
@@ -1208,17 +1208,20 @@ function renderDefinitions(definitions) {
   const total = definitions.length;
 
   const renderItem = (item, index) => {
-    const partOfSpeech = item.partOfSpeech
+    const pos = item.partOfSpeech
       ? `<span class="dslot-pos">${esc(item.partOfSpeech)}</span>`
       : "";
     const example =
       settings.showExamples && item.example
-        ? `<div class="dslot-example">${esc(item.example)}</div>`
+        ? renderExample(item.example)
         : "";
     return `<li class="dslot-def">
-      <span class="dslot-def-num">${index + 1}</span>
+      <span class="dslot-def-meta">
+        <span class="dslot-def-num">${index + 1}</span>
+        ${pos}
+      </span>
       <div class="dslot-def-copy">
-        <div class="dslot-def-line">${partOfSpeech}<span class="dslot-def-text">${esc(item.definition)}</span></div>
+        <div class="dslot-def-line"><span class="dslot-def-text">${esc(item.definition)}</span></div>
         ${example}
       </div>
     </li>`;
@@ -1238,6 +1241,18 @@ function renderDefinitions(definitions) {
   }
 
   return `<ol class="dslot-definitions">${rows}</ol>${extra}`;
+}
+
+// An example sentence can run far longer than the definitions it illustrates.
+// Short ones render inline; long ones are clamped to ~3 lines with a "more"
+// button that removes the clamp on click (see script.js dslot-example-more).
+const LONG_EXAMPLE_CHARS = 180;
+
+function renderExample(example) {
+  const text = String(example || "").trim();
+  if (!text) return "";
+  const long = text.length > LONG_EXAMPLE_CHARS;
+  return `<div class="dslot-example${long ? " dslot-example--clamped" : ""}">${esc(text)}${long ? `<button class="dslot-example-more" type="button" aria-expanded="false">more</button>` : ""}</div>`;
 }
 
 function renderRelated(synonyms, antonyms, intent) {
@@ -1469,12 +1484,24 @@ function renderEtymologyTree(raw) {
 function renderOrigin(origin) {
   const { prose, full } = etymologyText(origin);
   const tree = renderEtymologyTree(origin);
+  const originKicker = `<span class="dslot-origin-kicker">${esc(t("origin"))}:</span> `;
+
+  // Tree-only origin (no prose sentence extracted): show the collapsible tree
+  // directly under an inline "Origin:" lead-in, so no separate label row
+  // wastes vertical space above a section that begins with the tree itself.
+  if (tree && !prose) {
+    return `<div class="dslot-origin dslot-origin--tree">${originKicker}${tree}</div>`;
+  }
+
   const body =
     settings.originFormat === "full"
-      ? tree || `<p>${esc(full)}</p>`
+      ? tree && prose
+        ? `<p>${originKicker}${esc(prose)}</p>${tree}`
+        : `<p>${originKicker}${esc(full)}</p>`
       : (() => {
           let expander = "";
-          if (tree) {
+          if (tree && prose) {
+            // Prose summary leads the section; the tree rides in the expander.
             expander = tree;
           } else if (prose.length > 320) {
             expander = `<p>${esc(prose)}</p>`;
@@ -1483,13 +1510,10 @@ function renderOrigin(origin) {
           const more = expander
             ? `<details class="dslot-origin-more"><summary>More</summary>${expander}</details>`
             : "";
-          return `<p>${esc(summary)}</p>${more}`;
+          return `<p>${originKicker}${esc(summary)}</p>${more}`;
         })();
 
-  return `<div class="dslot-origin">
-    <div class="dslot-label">${esc(t("origin"))}</div>
-    ${body}
-  </div>`;
+  return `<div class="dslot-origin">${body}</div>`;
 }
 
 function esc(value) {

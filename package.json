@@ -27,6 +27,13 @@
       "description": "Native linkding bookmark search engine: results in a dedicated tab and via the `!linkding` bang shortcut. Which tabs it feeds is set from Degoog's own engine type override.",
       "version": "1.0.0",
       "screenshots": []
+    },
+    {
+      "path": "engines/marginalia",
+      "name": "Marginalia",
+      "description": "Independent web index (small-web, non-commercial sites) via the Marginalia Search API. Merges into the web tab and `!mg` bang.",
+      "version": "1.0.0",
+      "screenshots": []
     }
   ],
   "themes": [],

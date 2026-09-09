@@ -1,7 +1,7 @@
 {
   "name": "degoog-extensions",
   "description": "Self-hosted degoog extensions for the operator's stack",
-  "author": "roro",
+  "author": "rorotheworld",
   "plugins": [
     {
       "path": "plugins/linkding-slot",
